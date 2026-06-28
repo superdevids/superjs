@@ -1,7 +1,7 @@
 {
   "name": "superjs-core",
-  "version": "0.5.0",
-  "description": "JavaScript toolkit all-in-one buat developer Indonesia: validasi NIK/NPWP/Phone, terbilang, formatRupiah, timeAgo (WIB/WITA/WIT), deepClone, logger, dep scanner. 100+ fungsi, zero dep runtime.",
+  "version": "0.6.0",
+  "description": "JavaScript toolkit all-in-one buat developer Indonesia: validasi NIK/NPWP/Phone, terbilang, formatRupiah, timeAgo (WIB/WITA/WIT), deepClone, logger, dep scanner. 200+ fungsi, zero dependency.",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -121,10 +121,6 @@
     "size": "size-limit",
     "bench": "vitest bench",
     "ci": "npm run lint && npm run typecheck && npm run build && npm run test:coverage"
-  },
-  "dependencies": {
-    "commander": "^12.0.0",
-    "picocolors": "^1.1.0"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.1",
