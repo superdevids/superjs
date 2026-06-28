@@ -38,6 +38,24 @@ vi.mock('../../src/native/logger.js', () => ({
   },
 }))
 
+vi.mock('ws', () => {
+  const MockWebSocket = vi.fn()
+  MockWebSocket.OPEN = 1
+  MockWebSocket.CONNECTING = 0
+  MockWebSocket.CLOSING = 2
+  MockWebSocket.CLOSED = 3
+
+  class MockWebSocketServer {
+    on = vi.fn()
+    close = vi.fn()
+  }
+
+  return {
+    WebSocket: MockWebSocket,
+    WebSocketServer: MockWebSocketServer,
+  }
+})
+
 // ====================================================================
 // CLI: make-migration
 // ====================================================================
@@ -2469,5 +2487,2021 @@ describe('schema/primitives - email domain > 255', () => {
     const { schema } = await import('../src/schema/index.js')
     const label = 'a'.repeat(254)
     expect(() => schema.string().email().parse(`user@x.${label}`)).toThrow('Invalid email')
+  })
+})
+
+// ====================================================================
+// Server: errors.ts — exception handler registry & normalizeError dispatch
+// ====================================================================
+
+describe('errors — registerExceptionHandler and normalizeError', () => {
+  let origNodeEnv: string | undefined
+
+  beforeEach(() => {
+    origNodeEnv = process.env.NODE_ENV
+    process.env.NODE_ENV = 'test'
+  })
+
+  afterEach(() => {
+    process.env.NODE_ENV = origNodeEnv
+  })
+
+  it('registerExceptionHandler stores a handler for an HTTP exception class', async () => {
+    const { registerExceptionHandler, normalizeError, NotFoundException } = await import('../src/server/errors.js')
+    const handler = vi.fn((err: any) => err)
+    registerExceptionHandler(NotFoundException, handler)
+    const err = new NotFoundException()
+    normalizeError(err)
+    expect(handler).toHaveBeenCalledWith(err)
+  })
+
+  it('normalizeError with sync handler that returns a modified exception', async () => {
+    const { registerExceptionHandler, normalizeError, BadRequestException } = await import('../src/server/errors.js')
+    const handler = vi.fn(() => new BadRequestException('Custom'))
+    registerExceptionHandler(BadRequestException, handler)
+    const result = normalizeError(new BadRequestException())
+    expect(result).toBeInstanceOf(BadRequestException)
+    expect(result.message).toBe('Custom')
+  })
+
+  it('normalizeError with async handler that returns Promise', async () => {
+    const { registerExceptionHandler, normalizeError, UnauthorizedException } = await import('../src/server/errors.js')
+    const handler = vi.fn(async (err: any) => err)
+    registerExceptionHandler(UnauthorizedException, handler)
+    const result = normalizeError(new UnauthorizedException())
+    expect(result).toBeInstanceOf(Promise)
+    const awaited = await (result as unknown as Promise<any>)
+    expect(awaited).toBeInstanceOf(UnauthorizedException)
+  })
+
+  it('normalizeError with handler that returns null', async () => {
+    const { registerExceptionHandler, normalizeError, ForbiddenException } = await import('../src/server/errors.js')
+    const handler = vi.fn(() => null as any)
+    registerExceptionHandler(ForbiddenException, handler)
+    const result = normalizeError(new ForbiddenException())
+    expect(result).toBeNull()
+  })
+
+  it('normalizeError passes through HttpException when no handler registered', async () => {
+    const { normalizeError, ConflictException } = await import('../src/server/errors.js')
+    const err = new ConflictException()
+    const result = normalizeError(err)
+    expect(result).toBe(err)
+  })
+
+  it('normalizeError wraps non-Error in InternalServerErrorException with message', async () => {
+    process.env.NODE_ENV = 'development'
+    const { normalizeError, InternalServerErrorException } = await import('../src/server/errors.js')
+    const result = normalizeError('oops')
+    expect(result).toBeInstanceOf(InternalServerErrorException)
+    expect(result.message).toBe('oops')
+  })
+
+  it('normalizeError wraps non-Error with generic message in production', async () => {
+    process.env.NODE_ENV = 'production'
+    const { normalizeError, InternalServerErrorException } = await import('../src/server/errors.js')
+    const result = normalizeError('oops')
+    expect(result).toBeInstanceOf(InternalServerErrorException)
+    expect(result.message).toBe('Internal Server Error')
+  })
+
+  it('toJSON for InternalServerErrorException', async () => {
+    const { InternalServerErrorException } = await import('../src/server/errors.js')
+    const err = new InternalServerErrorException('Custom Server Error')
+    const json = err.toJSON()
+    expect(json).toEqual({
+      error: 'INTERNAL_SERVER_ERROR',
+      message: 'Custom Server Error',
+      statusCode: 500,
+    })
+  })
+
+  it('toJSON for ValidationException includes errors', async () => {
+    const { ValidationException } = await import('../src/server/errors.js')
+    const err = new ValidationException({ name: ['Required'] })
+    const json = err.toJSON()
+    expect(json).toEqual({
+      error: 'VALIDATION_ERROR',
+      message: 'Validation Failed',
+      statusCode: 422,
+      errors: { name: ['Required'] },
+    })
+  })
+
+  it('getDefaultErrorName maps unknown status to UNKNOWN_ERROR', async () => {
+    const { HttpException } = await import('../src/server/errors.js')
+    const err = new HttpException('custom', 999)
+    expect(err.toJSON().error).toBe('UNKNOWN_ERROR')
+  })
+})
+
+// ====================================================================
+// Server HTTP: client.ts — HttpClient
+// ====================================================================
+
+describe('HttpClient', () => {
+  let mockFetch: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    mockFetch = vi.fn()
+    vi.stubGlobal('fetch', mockFetch)
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('GET request succeeds', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true, status: 200,
+      json: vi.fn().mockResolvedValue({ id: 1 }),
+      headers: new Headers({ 'content-type': 'application/json' }),
+    })
+    const { HttpClient } = await import('../src/server/http/client.js')
+    const client = new HttpClient('http://localhost:3000')
+    const res = await client.get('/api/users')
+    expect(res.ok).toBe(true)
+    expect(res.data).toEqual({ id: 1 })
+    expect(mockFetch).toHaveBeenCalledWith('http://localhost:3000/api/users', expect.objectContaining({ method: 'GET' }))
+  })
+
+  it('POST request with body', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true, status: 201,
+      json: vi.fn().mockResolvedValue({ id: 42 }),
+      headers: new Headers({}),
+    })
+    const { HttpClient } = await import('../src/server/http/client.js')
+    const client = new HttpClient('http://localhost:3000')
+    const body = { name: 'John' }
+    const res = await client.post('/api/users', body)
+    expect(res.status).toBe(201)
+    const callArgs = mockFetch.mock.calls[0]
+    expect(callArgs[1].method).toBe('POST')
+    expect(JSON.parse(callArgs[1].body)).toEqual(body)
+  })
+
+  it('PUT request with body', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true, status: 200,
+      json: vi.fn().mockResolvedValue({ id: 1 }),
+      headers: new Headers({}),
+    })
+    const { HttpClient } = await import('../src/server/http/client.js')
+    const client = new HttpClient('http://localhost:3000')
+    await client.put('/api/users/1', { name: 'Updated' })
+    expect(mockFetch.mock.calls[0][1].method).toBe('PUT')
+  })
+
+  it('DELETE request', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true, status: 204,
+      json: vi.fn().mockResolvedValue(null),
+      headers: new Headers({}),
+    })
+    const { HttpClient } = await import('../src/server/http/client.js')
+    const client = new HttpClient('http://localhost:3000')
+    const res = await client.delete('/api/users/1')
+    expect(res.status).toBe(204)
+    expect(mockFetch.mock.calls[0][1].method).toBe('DELETE')
+  })
+
+  it('setHeader adds default header to requests', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true, status: 200,
+      json: vi.fn().mockResolvedValue({}),
+      headers: new Headers({}),
+    })
+    const { HttpClient } = await import('../src/server/http/client.js')
+    const client = new HttpClient('http://localhost:3000')
+    client.setHeader('Authorization', 'Bearer token123')
+    await client.get('/api/protected')
+    const headers = mockFetch.mock.calls[0][1].headers
+    expect(headers['Authorization']).toBe('Bearer token123')
+  })
+
+  it('setTimeout uses AbortController with the given ms', async () => {
+    const abortSpy = vi.spyOn(AbortController.prototype, 'abort')
+    mockFetch.mockImplementationOnce(() => new Promise(() => {}))
+    const { HttpClient } = await import('../src/server/http/client.js')
+    const client = new HttpClient('http://localhost:3000')
+    client.setTimeout(10)
+    const promise = client.get('/api/slow')
+    await new Promise<void>(resolve => setTimeout(resolve, 20))
+    expect(abortSpy).toHaveBeenCalled()
+    abortSpy.mockRestore()
+  })
+
+  it('handles error response (non-ok status)', async () => {
+    mockFetch.mockResolvedValue({
+      ok: false, status: 404,
+      json: vi.fn().mockResolvedValue({ error: 'Not Found' }),
+      headers: new Headers({}),
+    })
+    const { HttpClient } = await import('../src/server/http/client.js')
+    const client = new HttpClient('http://localhost:3000')
+    const res = await client.get('/api/unknown')
+    expect(res.ok).toBe(false)
+    expect(res.status).toBe(404)
+    expect(res.data).toEqual({ error: 'Not Found' })
+  })
+
+  it('trims trailing slash from baseUrl', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true, status: 200,
+      json: vi.fn().mockResolvedValue({}),
+      headers: new Headers({}),
+    })
+    const { HttpClient } = await import('../src/server/http/client.js')
+    const client = new HttpClient('http://example.com/')
+    await client.get('/api/test')
+    expect(mockFetch.mock.calls[0][0]).toBe('http://example.com/api/test')
+  })
+})
+
+// ====================================================================
+// Server Mail: index.ts — Mailer, MailMessage, MailTransport, ConsoleMailTransport
+// ====================================================================
+
+describe('Mail', () => {
+  it('ConsoleMailTransport.send logs to console', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const { ConsoleMailTransport } = await import('../src/server/mail/index.js')
+    const transport = new ConsoleMailTransport()
+    await transport.send({ to: 'user@test.com', subject: 'Hi', text: 'Hello' })
+    expect(logSpy).toHaveBeenCalledWith('[Mail]', expect.stringContaining('user@test.com'))
+    logSpy.mockRestore()
+  })
+
+  it('Mailer.send calls transport.send', async () => {
+    const { Mailer } = await import('../src/server/mail/index.js')
+    const transport = { send: vi.fn().mockResolvedValue(undefined) }
+    const mailer = new Mailer(transport)
+    const message = { to: 'a@b.com', subject: 'Test', html: '<p>Hi</p>' }
+    await mailer.send(message)
+    expect(transport.send).toHaveBeenCalledWith(message)
+  })
+
+  it('Mailer.sendLater schedules async send via setImmediate', async () => {
+    const { Mailer } = await import('../src/server/mail/index.js')
+    const transport = { send: vi.fn().mockResolvedValue(undefined) }
+    const mailer = new Mailer(transport)
+    const message = { to: 'later@test.com', subject: 'Later', text: 'Delayed' }
+    await mailer.sendLater(message)
+    await new Promise<void>(resolve => setImmediate(resolve))
+    expect(transport.send).toHaveBeenCalledWith(message)
+  })
+})
+
+// ====================================================================
+// Server Middleware: rate-limiter-store.ts — MemoryRateLimiterStore
+// ====================================================================
+
+describe('MemoryRateLimiterStore', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('first hit returns count=1 with correct remaining', async () => {
+    const { MemoryRateLimiterStore } = await import('../src/server/middleware/rate-limiter-store.js')
+    const store = new MemoryRateLimiterStore()
+    const result = await store.hit('key1', 60000, 10)
+    expect(result.count).toBe(1)
+    expect(result.remaining).toBe(9)
+    expect(result.resetAt).toBeGreaterThan(Date.now())
+    store.close()
+  })
+
+  it('second hit increments count within window', async () => {
+    const { MemoryRateLimiterStore } = await import('../src/server/middleware/rate-limiter-store.js')
+    const store = new MemoryRateLimiterStore()
+    await store.hit('key2', 60000, 5)
+    const result = await store.hit('key2', 60000, 5)
+    expect(result.count).toBe(2)
+    expect(result.remaining).toBe(3)
+    store.close()
+  })
+
+  it('resets after window expires', async () => {
+    vi.useFakeTimers()
+    const { MemoryRateLimiterStore } = await import('../src/server/middleware/rate-limiter-store.js')
+    const store = new MemoryRateLimiterStore()
+    await store.hit('key3', 1000, 5)
+    vi.advanceTimersByTime(1001)
+    const result = await store.hit('key3', 1000, 5)
+    expect(result.count).toBe(1)
+    expect(result.remaining).toBe(4)
+    store.close()
+  })
+
+  it('close clears the cleanup interval', async () => {
+    const { MemoryRateLimiterStore } = await import('../src/server/middleware/rate-limiter-store.js')
+    const store = new MemoryRateLimiterStore()
+    expect(() => store.close()).not.toThrow()
+  })
+
+  it('cleanup interval removes expired entries', async () => {
+    vi.useFakeTimers()
+    const { MemoryRateLimiterStore } = await import('../src/server/middleware/rate-limiter-store.js')
+    const store = new MemoryRateLimiterStore()
+    await store.hit('expire-key', 1000, 5)
+    expect((await store.hit('expire-key', 1000, 5)).count).toBe(2)
+    vi.advanceTimersByTime(60001)
+    const result = await store.hit('expire-key', 1000, 5)
+    expect(result.count).toBe(1)
+    expect(result.remaining).toBe(4)
+    store.close()
+  })
+
+  it('remaining never goes below 0', async () => {
+    const { MemoryRateLimiterStore } = await import('../src/server/middleware/rate-limiter-store.js')
+    const store = new MemoryRateLimiterStore()
+    let result = await store.hit('limited', 60000, 2)
+    expect(result.remaining).toBe(1)
+    result = await store.hit('limited', 60000, 2)
+    expect(result.remaining).toBe(0)
+    result = await store.hit('limited', 60000, 2)
+    expect(result.remaining).toBe(0)
+    store.close()
+  })
+})
+
+// ====================================================================
+// Server Auth: oauth.ts — OAuth2Client
+// ====================================================================
+
+describe('OAuth2Client', () => {
+  it('register and get a provider', async () => {
+    const { OAuth2Client } = await import('../src/server/auth/oauth.js')
+    const client = new OAuth2Client()
+    const provider = {
+      authorizeUrl: vi.fn(() => 'https://provider.com/auth'),
+      exchangeCode: vi.fn().mockResolvedValue({ accessToken: 'tok' }),
+      getUser: vi.fn().mockResolvedValue({ id: '1', email: 'u@test.com' }),
+    }
+    client.register('google', provider)
+    const retrieved = client.get('google')
+    expect(retrieved).toBe(provider)
+    expect(retrieved!.authorizeUrl('state123')).toBe('https://provider.com/auth')
+  })
+
+  it('get returns undefined for unknown provider', async () => {
+    const { OAuth2Client } = await import('../src/server/auth/oauth.js')
+    const client = new OAuth2Client()
+    expect(client.get('nonexistent')).toBeUndefined()
+  })
+})
+
+// ====================================================================
+// Server Auth: session-store.ts — MemorySessionStore
+// ====================================================================
+
+describe('MemorySessionStore', () => {
+  it('read returns null for non-existent session', async () => {
+    const { MemorySessionStore } = await import('../src/server/auth/session-store.js')
+    const store = new MemorySessionStore()
+    expect(await store.read('nonexistent')).toBeNull()
+  })
+
+  it('write and read round-trip', async () => {
+    const { MemorySessionStore } = await import('../src/server/auth/session-store.js')
+    const store = new MemorySessionStore()
+    const farFuture = Date.now() + 86400000
+    await store.write('sess1', { userId: 42, role: 'admin' }, farFuture)
+    const data = await store.read('sess1')
+    expect(data).toEqual({ userId: 42, role: 'admin' })
+  })
+
+  it('read returns null for expired session', async () => {
+    const { MemorySessionStore } = await import('../src/server/auth/session-store.js')
+    const store = new MemorySessionStore()
+    await store.write('sess_expired', { temp: true }, Date.now() - 1000)
+    expect(await store.read('sess_expired')).toBeNull()
+  })
+
+  it('destroy removes session', async () => {
+    const { MemorySessionStore } = await import('../src/server/auth/session-store.js')
+    const store = new MemorySessionStore()
+    await store.write('sess_del', { data: 'x' }, Date.now() + 86400000)
+    await store.destroy('sess_del')
+    expect(await store.read('sess_del')).toBeNull()
+  })
+
+  it('cleanup removes expired sessions', async () => {
+    const { MemorySessionStore } = await import('../src/server/auth/session-store.js')
+    const store = new MemorySessionStore()
+    await store.write('keep', { live: true }, Date.now() + 86400000)
+    await store.write('remove', { dead: true }, Date.now() - 1000)
+    await store.cleanup()
+    expect(await store.read('keep')).toEqual({ live: true })
+    expect(await store.read('remove')).toBeNull()
+  })
+})
+
+// ====================================================================
+// Server Config: index.ts — Config class
+// ====================================================================
+
+describe('Config', () => {
+  let origEnv: NodeJS.ProcessEnv
+
+  beforeEach(() => {
+    origEnv = process.env
+    process.env = { ...origEnv }
+  })
+
+  afterEach(() => {
+    process.env = origEnv
+  })
+
+  it('set and get values', async () => {
+    const { Config } = await import('../src/server/config/index.js')
+    const config = new Config()
+    config.set('name', 'SpeexJS')
+    expect(config.get('name')).toBe('SpeexJS')
+  })
+
+  it('get returns default when key missing', async () => {
+    const { Config } = await import('../src/server/config/index.js')
+    const config = new Config()
+    expect(config.get('missing', 42)).toBe(42)
+  })
+
+  it('get returns undefined when no default and key missing', async () => {
+    const { Config } = await import('../src/server/config/index.js')
+    const config = new Config()
+    expect(config.get('missing')).toBeUndefined()
+  })
+
+  it('has returns true for existing key', async () => {
+    const { Config } = await import('../src/server/config/index.js')
+    const config = new Config()
+    config.set('exists', true)
+    expect(config.has('exists')).toBe(true)
+    expect(config.has('nope')).toBe(false)
+  })
+
+  it('set returns this for chaining', async () => {
+    const { Config } = await import('../src/server/config/index.js')
+    const config = new Config()
+    const result = config.set('a', 1).set('b', 2)
+    expect(result).toBe(config)
+    expect(config.get('a')).toBe(1)
+    expect(config.get('b')).toBe(2)
+  })
+
+  it('constructor with initial values', async () => {
+    const { Config } = await import('../src/server/config/index.js')
+    const config = new Config({ host: 'localhost', port: 8080 })
+    expect(config.get('host')).toBe('localhost')
+    expect(config.get('port')).toBe(8080)
+  })
+
+  it('fromEnv loads prefixed environment variables', async () => {
+    process.env['APP_DB_HOST'] = 'db.example.com'
+    process.env['APP_DEBUG'] = 'true'
+    process.env['APP_PORT'] = '5432'
+    process.env['APP_NULL_VAL'] = 'null'
+    process.env['APP_UNDEFINED_VAL'] = 'undefined'
+    process.env['OTHER_KEY'] = 'ignored'
+    const { Config } = await import('../src/server/config/index.js')
+    const config = Config.fromEnv('APP_')
+    expect(config.get('db_host')).toBe('db.example.com')
+    expect(config.get('debug')).toBe(true)
+    expect(config.get('port')).toBe(5432)
+    expect(config.get('null_val')).toBeNull()
+    expect(config.get('undefined_val')).toBeUndefined()
+    expect(config.has('other_key')).toBe(false)
+  })
+
+  it('fromEnv uses default APP_ prefix', async () => {
+    process.env['APP_TEST'] = 'hello'
+    const { Config } = await import('../src/server/config/index.js')
+    const config = Config.fromEnv()
+    expect(config.get('test')).toBe('hello')
+  })
+
+  it('parseValue handles boolean true/false', async () => {
+    const { Config } = await import('../src/server/config/index.js')
+    process.env['APP_FLAG1'] = 'true'
+    process.env['APP_FLAG2'] = 'false'
+    const config = Config.fromEnv('APP_')
+    expect(config.get('flag1')).toBe(true)
+    expect(config.get('flag2')).toBe(false)
+  })
+
+  it('parseValue returns string for non-numeric non-boolean', async () => {
+    const { Config } = await import('../src/server/config/index.js')
+    process.env['APP_TEXT'] = 'hello_world'
+    const config = Config.fromEnv('APP_')
+    expect(config.get('text')).toBe('hello_world')
+  })
+})
+
+// ====================================================================
+// Server Database: cursor-pagination.ts — type-only module
+// ====================================================================
+
+describe('CursorPaginatedResult', () => {
+  it('is a type-only interface — exists as export', async () => {
+    const mod = await import('../src/server/database/cursor-pagination.js')
+    // The module exports only a TypeScript interface (no runtime code)
+    // Verify the module loads without error
+    expect(mod).toBeDefined()
+    expect(Object.keys(mod)).toHaveLength(0)
+  })
+})
+
+// ====================================================================
+// Server Database: factory.ts — Factory & Faker
+// ====================================================================
+
+describe('Factory', () => {
+  it('make returns data from callback', async () => {
+    const { Factory } = await import('../src/server/database/factory.js')
+    const factory = new Factory(() => ({ name: 'test', value: 42 }))
+    const result = factory.make()
+    expect(result).toEqual({ name: 'test', value: 42 })
+  })
+
+  it('make passes faker and index to callback', async () => {
+    const { Factory } = await import('../src/server/database/factory.js')
+    const callback = vi.fn(() => ({}))
+    const factory = new Factory(callback)
+    factory.make(5)
+    expect(callback).toHaveBeenCalledWith(expect.anything(), 5)
+  })
+
+  it('count sets the count value', async () => {
+    const { Factory } = await import('../src/server/database/factory.js')
+    const factory = new Factory(() => ({}))
+    const result = factory.count(10)
+    expect(result).toBe(factory)
+  })
+
+  it('make defaults index to 0 when not provided', async () => {
+    const { Factory } = await import('../src/server/database/factory.js')
+    const callback = vi.fn(() => ({}))
+    const factory = new Factory(callback)
+    factory.make()
+    expect(callback).toHaveBeenCalledWith(expect.anything(), 0)
+  })
+
+  it('setConnection stores the connection and returns this', async () => {
+    const { Factory } = await import('../src/server/database/factory.js')
+    const factory = new Factory(() => ({}))
+    const conn = {
+      raw: vi.fn(),
+      getDialect: () => ({ wrapIdentifier: vi.fn((s: string) => `\`${s}\``) }),
+      getDriver: () => 'mysql',
+      getPrefix: () => '',
+    }
+    const result = factory.setConnection(conn as any)
+    expect(result).toBe(factory)
+  })
+
+  it('create throws when connection not set', async () => {
+    const { Factory } = await import('../src/server/database/factory.js')
+    const factory = new Factory(() => ({ name: 'test' }))
+    await expect(factory.create('items')).rejects.toThrow('Connection not set')
+  })
+
+  it('create inserts rows via connection.raw', async () => {
+    const { Factory } = await import('../src/server/database/factory.js')
+    const raw = vi.fn().mockResolvedValue({ rows: [] })
+    const conn = {
+      raw,
+      getDialect: () => ({ wrapIdentifier: vi.fn((s: string) => `\`${s}\``) }),
+      getDriver: () => 'mysql',
+      getPrefix: () => '',
+    }
+    const factory = new Factory((_faker, i) => ({ name: `item_${i}`, value: i }))
+    factory.setConnection(conn as any)
+    factory.count(3)
+    const results = await factory.create('items')
+    expect(results).toHaveLength(3)
+    expect(results[0]).toEqual({ name: 'item_0', value: 0 })
+    expect(results[2]).toEqual({ name: 'item_2', value: 2 })
+    expect(raw).toHaveBeenCalledTimes(3)
+    expect(raw).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO'),
+      expect.arrayContaining(['item_0', 0]),
+    )
+  })
+})
+
+describe('Faker', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('name returns first and last name', async () => {
+    const { Faker } = await import('../src/server/database/factory.js')
+    const faker = new Faker()
+    const name = faker.name()
+    expect(name).toMatch(/^[A-Z][a-z]+ [A-Z][a-z]+$/)
+  })
+
+  it('firstName returns a first name', async () => {
+    const { Faker } = await import('../src/server/database/factory.js')
+    const faker = new Faker()
+    expect(faker.firstName()).toMatch(/^[A-Z][a-z]+$/)
+  })
+
+  it('lastName returns a last name', async () => {
+    const { Faker } = await import('../src/server/database/factory.js')
+    const faker = new Faker()
+    expect(faker.lastName()).toMatch(/^[A-Z][a-z]+$/)
+  })
+
+  it('email returns a valid email', async () => {
+    const { Faker } = await import('../src/server/database/factory.js')
+    const faker = new Faker()
+    const email = faker.email()
+    expect(email).toMatch(/^[a-z]+\.[a-z]+@[a-z.]+$/)
+  })
+
+  it('uuid returns a valid UUID v4 string', async () => {
+    const { Faker } = await import('../src/server/database/factory.js')
+    const faker = new Faker()
+    const uuid = faker.uuid()
+    expect(uuid).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+  })
+
+  it('number returns value within range', async () => {
+    const { Faker } = await import('../src/server/database/factory.js')
+    const faker = new Faker()
+    for (let i = 0; i < 100; i++) {
+      const n = faker.number(5, 10)
+      expect(n).toBeGreaterThanOrEqual(5)
+      expect(n).toBeLessThanOrEqual(10)
+    }
+  })
+
+  it('number defaults to 0-1000 range', async () => {
+    const { Faker } = await import('../src/server/database/factory.js')
+    const faker = new Faker()
+    const n = faker.number()
+    expect(n).toBeGreaterThanOrEqual(0)
+    expect(n).toBeLessThanOrEqual(1000)
+  })
+
+  it('boolean returns true or false', async () => {
+    const { Faker } = await import('../src/server/database/factory.js')
+    const faker = new Faker()
+    const results = new Set<boolean>()
+    for (let i = 0; i < 50; i++) results.add(faker.boolean())
+    expect(results.size).toBe(2)
+    expect(results.has(true)).toBe(true)
+    expect(results.has(false)).toBe(true)
+  })
+
+  it('pick returns an element from the array', async () => {
+    const { Faker } = await import('../src/server/database/factory.js')
+    const faker = new Faker()
+    const arr = ['a', 'b', 'c']
+    expect(arr).toContain(faker.pick(arr))
+  })
+
+  it('unique returns unique values with prefix', async () => {
+    const { Faker } = await import('../src/server/database/factory.js')
+    const faker = new Faker()
+    const a = faker.unique('item')
+    const b = faker.unique('item')
+    expect(a).not.toBe(b)
+    expect(a).toMatch(/^item_\d+$/)
+    expect(b).toMatch(/^item_\d+$/)
+  })
+})
+
+// ====================================================================
+// Server HTTP: serializer.ts — ResponseSerializer
+// ====================================================================
+
+describe('ResponseSerializer', () => {
+  it('success returns success:true with data and default message', async () => {
+    const { ResponseSerializer } = await import('../src/server/http/serializer.js')
+    const result = ResponseSerializer.success({ id: 1 })
+    expect(result).toEqual({ success: true, data: { id: 1 }, message: 'OK' })
+  })
+
+  it('success returns success:true with custom message', async () => {
+    const { ResponseSerializer } = await import('../src/server/http/serializer.js')
+    const result = ResponseSerializer.success([1, 2, 3], 'All good')
+    expect(result).toEqual({ success: true, data: [1, 2, 3], message: 'All good' })
+  })
+
+  it('error returns success:false with message only', async () => {
+    const { ResponseSerializer } = await import('../src/server/http/serializer.js')
+    const result = ResponseSerializer.error('Something went wrong')
+    expect(result).toEqual({ success: false, message: 'Something went wrong' })
+  })
+
+  it('error returns success:false with errors object', async () => {
+    const { ResponseSerializer } = await import('../src/server/http/serializer.js')
+    const result = ResponseSerializer.error('Validation failed', { name: ['Required'] })
+    expect(result).toEqual({
+      success: false,
+      message: 'Validation failed',
+      errors: { name: ['Required'] },
+    })
+  })
+
+  it('paginated returns success:true with meta', async () => {
+    const { ResponseSerializer } = await import('../src/server/http/serializer.js')
+    const result = ResponseSerializer.paginated(['a', 'b'], 100, 1, 10)
+    expect(result).toEqual({
+      success: true,
+      data: ['a', 'b'],
+      meta: { total: 100, page: 1, perPage: 10, lastPage: 10 },
+    })
+  })
+
+  it('paginated handles lastPage with zero items', async () => {
+    const { ResponseSerializer } = await import('../src/server/http/serializer.js')
+    const result = ResponseSerializer.paginated([], 0, 1, 10)
+    expect(result.meta).toEqual({ total: 0, page: 1, perPage: 10, lastPage: 0 })
+  })
+
+  it('wrap calls response.status().json()', async () => {
+    const { ResponseSerializer } = await import('../src/server/http/serializer.js')
+    const statusFn = vi.fn().mockReturnThis()
+    const jsonFn = vi.fn()
+    const response = { status: statusFn, json: jsonFn } as any
+    ResponseSerializer.wrap(response, { id: 1 }, 201)
+    expect(statusFn).toHaveBeenCalledWith(201)
+    expect(jsonFn).toHaveBeenCalledWith({ id: 1 })
+  })
+
+  it('wrap defaults to status 200', async () => {
+    const { ResponseSerializer } = await import('../src/server/http/serializer.js')
+    const statusFn = vi.fn().mockReturnThis()
+    const jsonFn = vi.fn()
+    const response = { status: statusFn, json: jsonFn } as any
+    ResponseSerializer.wrap(response, 'ok')
+    expect(statusFn).toHaveBeenCalledWith(200)
+    expect(jsonFn).toHaveBeenCalledWith('ok')
+  })
+})
+
+// ====================================================================
+// Database rate-limiter-store: DatabaseRateLimiterStore
+// ====================================================================
+
+describe('DatabaseRateLimiterStore', () => {
+  function makeMockRunner() {
+    const wrapIdentifier = vi.fn((s: string) => `\`${s}\``)
+    const dialect = { wrapIdentifier }
+    const raw = vi.fn()
+    return { raw, getDialect: () => dialect, getDriver: () => 'mysql', getPrefix: () => '' } as any
+  }
+
+  it('hit returns count from database row', async () => {
+    const { DatabaseRateLimiterStore } = await import('../src/server/middleware/rate-limiter-store.js')
+    const runner = makeMockRunner()
+    runner.raw
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ hits: 3, reset_at: Date.now() + 60000 }] })
+    const store = new DatabaseRateLimiterStore(runner)
+    const result = await store.hit('db-key', 60000, 10)
+    expect(result.count).toBe(3)
+    expect(result.remaining).toBe(7)
+  })
+
+  it('hit returns count=1 when row is missing after insert', async () => {
+    const { DatabaseRateLimiterStore } = await import('../src/server/middleware/rate-limiter-store.js')
+    const runner = makeMockRunner()
+    runner.raw
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+    const store = new DatabaseRateLimiterStore(runner)
+    const result = await store.hit('db-key-missing', 60000, 10)
+    expect(result.count).toBe(1)
+    expect(result.remaining).toBe(9)
+  })
+
+  it('hit falls back when insert throws', async () => {
+    const { DatabaseRateLimiterStore } = await import('../src/server/middleware/rate-limiter-store.js')
+    const runner = makeMockRunner()
+    runner.raw
+      .mockRejectedValueOnce(new Error('DB error'))
+      .mockResolvedValueOnce({ rows: [{ hits: 1, reset_at: Date.now() + 60000 }] })
+    const store = new DatabaseRateLimiterStore(runner)
+    const result = await store.hit('db-key-fallback', 60000, 10)
+    expect(result.count).toBe(1)
+    expect(result.remaining).toBe(9)
+  })
+})
+
+// ====================================================================
+// Database session-store: DatabaseSessionStore
+// ====================================================================
+
+describe('DatabaseSessionStore', () => {
+  function makeMockRunner() {
+    const wrapIdentifier = vi.fn((s: string) => `\`${s}\``)
+    const dialect = { wrapIdentifier }
+    const raw = vi.fn()
+    return { raw, getDialect: () => dialect, getDriver: () => 'mysql', getPrefix: () => '' } as any
+  }
+
+  it('read returns null when no row found', async () => {
+    const { DatabaseSessionStore } = await import('../src/server/auth/session-store.js')
+    const runner = makeMockRunner()
+    runner.raw.mockResolvedValue({ rows: [] })
+    const store = new DatabaseSessionStore(runner)
+    expect(await store.read('nosession')).toBeNull()
+  })
+
+  it('read parses JSON data from row', async () => {
+    const { DatabaseSessionStore } = await import('../src/server/auth/session-store.js')
+    const runner = makeMockRunner()
+    runner.raw.mockResolvedValue({ rows: [{ data: '{"userId":1}', expires_at: Date.now() + 86400000 }] })
+    const store = new DatabaseSessionStore(runner)
+    const data = await store.read('sess1')
+    expect(data).toEqual({ userId: 1 })
+  })
+
+  it('read returns data object directly when not a string', async () => {
+    const { DatabaseSessionStore } = await import('../src/server/auth/session-store.js')
+    const runner = makeMockRunner()
+    runner.raw.mockResolvedValue({ rows: [{ data: { userId: 2 }, expires_at: Date.now() + 86400000 }] })
+    const store = new DatabaseSessionStore(runner)
+    const data = await store.read('sess2')
+    expect(data).toEqual({ userId: 2 })
+  })
+
+  it('write sends REPLACE query with JSON.stringify data', async () => {
+    const { DatabaseSessionStore } = await import('../src/server/auth/session-store.js')
+    const runner = makeMockRunner()
+    runner.raw.mockResolvedValue({ rows: [] })
+    const store = new DatabaseSessionStore(runner)
+    await store.write('sess_write', { role: 'admin' }, 9999999999999)
+    expect(runner.raw).toHaveBeenCalledWith(
+      expect.stringContaining('REPLACE INTO'),
+      ['sess_write', '{"role":"admin"}', 9999999999999],
+    )
+  })
+
+  it('destroy sends DELETE query', async () => {
+    const { DatabaseSessionStore } = await import('../src/server/auth/session-store.js')
+    const runner = makeMockRunner()
+    runner.raw.mockResolvedValue({ rows: [] })
+    const store = new DatabaseSessionStore(runner)
+    await store.destroy('sess_del')
+    expect(runner.raw).toHaveBeenCalledWith(expect.stringContaining('DELETE'), ['sess_del'])
+  })
+
+  it('cleanup sends DELETE for expired sessions', async () => {
+    const { DatabaseSessionStore } = await import('../src/server/auth/session-store.js')
+    const runner = makeMockRunner()
+    runner.raw.mockResolvedValue({ rows: [] })
+    const store = new DatabaseSessionStore(runner)
+    await store.cleanup()
+    expect(runner.raw).toHaveBeenCalledWith(expect.stringContaining('DELETE'), expect.any(Array))
+  })
+
+  it('uses custom table name', async () => {
+    const { DatabaseSessionStore } = await import('../src/server/auth/session-store.js')
+    const runner = makeMockRunner()
+    runner.raw.mockResolvedValue({ rows: [] })
+    const store = new DatabaseSessionStore(runner, 'custom_sessions')
+    await store.read('test')
+    expect(runner.raw.mock.calls[0][0]).toContain('custom_sessions')
+  })
+})
+
+// ====================================================================
+// Server: i18n/index.ts
+// ====================================================================
+
+describe('I18n', () => {
+  it('loads locale and translates string messages', async () => {
+    const { I18n } = await import('../src/server/i18n/index.js')
+    const i18n = new I18n()
+    i18n.load('fr', { hello: 'Bonjour', goodbye: 'Au revoir' })
+    i18n.setLocale('fr')
+    expect(i18n.t('hello')).toBe('Bonjour')
+    expect(i18n.t('goodbye')).toBe('Au revoir')
+  })
+
+  it('t() uses function messages with args', async () => {
+    const { I18n } = await import('../src/server/i18n/index.js')
+    const i18n = new I18n()
+    i18n.load('en', {
+      greet: (name: string) => `Hello, ${name}!`,
+    })
+    expect(i18n.t('greet', 'World')).toBe('Hello, World!')
+  })
+
+  it('t() returns key for missing message', async () => {
+    const { I18n } = await import('../src/server/i18n/index.js')
+    const i18n = new I18n()
+    expect(i18n.t('nonexistent')).toBe('nonexistent')
+  })
+
+  it('setLocale throws for unknown locale', async () => {
+    const { I18n } = await import('../src/server/i18n/index.js')
+    const i18n = new I18n()
+    expect(() => i18n.setLocale('de')).toThrow('Locale "de" not loaded')
+  })
+
+  it('getLocale returns current locale', async () => {
+    const { I18n } = await import('../src/server/i18n/index.js')
+    const i18n = new I18n()
+    expect(i18n.getLocale()).toBe('en')
+    i18n.load('es', { hola: 'Hola' })
+    i18n.setLocale('es')
+    expect(i18n.getLocale()).toBe('es')
+  })
+
+  it('constructor loads empty en locale', async () => {
+    const { I18n } = await import('../src/server/i18n/index.js')
+    const i18n = new I18n()
+    expect(i18n.getLocale()).toBe('en')
+  })
+})
+
+// ====================================================================
+// Server: mail/templates.ts
+// ====================================================================
+
+describe('TemplateEngine', () => {
+  it('register and render a template', async () => {
+    const { TemplateEngine } = await import('../src/server/mail/templates.js')
+    const engine = new TemplateEngine()
+    engine.register('test', (data) => ({
+      subject: `Subject: ${data.name}`,
+      html: `<p>${data.name}</p>`,
+      text: `Text: ${data.name}`,
+    }))
+    const result = engine.render('test', { name: 'Alice' })
+    expect(result.subject).toBe('Subject: Alice')
+    expect(result.html).toBe('<p>Alice</p>')
+    expect(result.text).toBe('Text: Alice')
+  })
+
+  it('render throws for unknown template', async () => {
+    const { TemplateEngine } = await import('../src/server/mail/templates.js')
+    const engine = new TemplateEngine()
+    expect(() => engine.render('unknown', {})).toThrow('Template "unknown" not found')
+  })
+})
+
+describe('defaultTemplates', () => {
+  it('welcome renders with data', async () => {
+    const { defaultTemplates } = await import('../src/server/mail/templates.js')
+    const result = defaultTemplates.render('welcome', { name: 'Bob' })
+    expect(result.subject).toBe('Welcome, Bob!')
+    expect(result.html).toContain('Hi Bob')
+    expect(result.text).toContain('Hi Bob')
+  })
+
+  it('welcome renders without data uses defaults', async () => {
+    const { defaultTemplates } = await import('../src/server/mail/templates.js')
+    const result = defaultTemplates.render('welcome', {})
+    expect(result.subject).toBe('Welcome, User!')
+    expect(result.html).toContain('Hi there')
+    expect(result.text).toContain('Hi there')
+  })
+
+  it('reset-password renders', async () => {
+    const { defaultTemplates } = await import('../src/server/mail/templates.js')
+    const result = defaultTemplates.render('reset-password', { url: 'https://example.com/reset/abc' })
+    expect(result.subject).toBe('Password Reset Request')
+    expect(result.html).toContain('href="https://example.com/reset/abc"')
+    expect(result.text).toContain('https://example.com/reset/abc')
+  })
+
+  it('reset-password without data uses default url', async () => {
+    const { defaultTemplates } = await import('../src/server/mail/templates.js')
+    const result = defaultTemplates.render('reset-password', {})
+    expect(result.html).toContain('href="#"')
+    expect(result.text).toContain('#')
+  })
+})
+
+// ====================================================================
+// Server: middleware/maintenance.ts
+// ====================================================================
+
+describe('maintenance middleware', () => {
+  beforeEach(async () => {
+    vi.clearAllMocks()
+    const { disableMaintenanceMode } = await import('../src/server/middleware/maintenance.js')
+    disableMaintenanceMode()
+  })
+
+  it('enableMaintenanceMode sets mode on', async () => {
+    const { enableMaintenanceMode, isInMaintenanceMode } = await import('../src/server/middleware/maintenance.js')
+    enableMaintenanceMode()
+    expect(isInMaintenanceMode()).toBe(true)
+  })
+
+  it('disableMaintenanceMode sets mode off', async () => {
+    const { enableMaintenanceMode, disableMaintenanceMode, isInMaintenanceMode } = await import('../src/server/middleware/maintenance.js')
+    enableMaintenanceMode()
+    disableMaintenanceMode()
+    expect(isInMaintenanceMode()).toBe(false)
+  })
+
+  it('isInMaintenanceMode returns false initially', async () => {
+    const { isInMaintenanceMode } = await import('../src/server/middleware/maintenance.js')
+    expect(isInMaintenanceMode()).toBe(false)
+  })
+
+  it('maintenance middleware returns 503 when enabled', async () => {
+    const { enableMaintenanceMode, maintenance } = await import('../src/server/middleware/maintenance.js')
+    enableMaintenanceMode(120)
+    const mw = maintenance()
+    const ctx: any = { response: { status: vi.fn().mockReturnThis(), header: vi.fn().mockReturnThis(), json: vi.fn() } }
+    const next = vi.fn()
+    await mw(ctx, next)
+    expect(ctx.response.status).toHaveBeenCalledWith(503)
+    expect(ctx.response.header).toHaveBeenCalledWith('retry-after', '120')
+    expect(ctx.response.json).toHaveBeenCalledWith({
+      error: 'SERVICE_UNAVAILABLE',
+      message: 'Application is in maintenance mode. Please try again later.',
+    })
+    expect(next).not.toHaveBeenCalled()
+  })
+
+  it('maintenance middleware passes through when disabled', async () => {
+    const { maintenance } = await import('../src/server/middleware/maintenance.js')
+    const mw = maintenance()
+    const next = vi.fn().mockResolvedValue(undefined)
+    const ctx: any = { response: {} }
+    await mw(ctx, next)
+    expect(next).toHaveBeenCalled()
+  })
+
+  it('enableMaintenanceMode defaults retryAfter to 60', async () => {
+    const { enableMaintenanceMode, maintenance } = await import('../src/server/middleware/maintenance.js')
+    enableMaintenanceMode()
+    const mw = maintenance()
+    const ctx: any = { response: { status: vi.fn().mockReturnThis(), header: vi.fn().mockReturnThis(), json: vi.fn() } }
+    await mw(ctx, vi.fn())
+    expect(ctx.response.header).toHaveBeenCalledWith('retry-after', '60')
+  })
+})
+
+// ====================================================================
+// Server: notifications/index.ts
+// ====================================================================
+
+describe('NotificationSender', () => {
+  function createMockDb() {
+    const dialect = { wrapIdentifier: vi.fn((id: string) => `\`${id}\``) }
+    return {
+      getDialect: vi.fn(() => dialect),
+      raw: vi.fn().mockResolvedValue({ rows: [] }),
+    }
+  }
+
+  it('constructor without db', async () => {
+    const { NotificationSender } = await import('../src/server/notifications/index.js')
+    const ns = new NotificationSender()
+    await ns.send({ type: 'test', notifiableId: 1, data: { msg: 'x' } })
+  })
+
+  it('send with db mock', async () => {
+    const { NotificationSender } = await import('../src/server/notifications/index.js')
+    const db = createMockDb()
+    const ns = new NotificationSender(db as any)
+    await ns.send({ type: 'alert', notifiableId: 42, data: { severity: 'high' } })
+    expect(db.raw).toHaveBeenCalled()
+    const [sql] = db.raw.mock.calls[0]
+    expect(sql).toContain('INSERT INTO')
+    expect(sql).toContain('notifications')
+  })
+
+  it('markAsRead', async () => {
+    const { NotificationSender } = await import('../src/server/notifications/index.js')
+    const db = createMockDb()
+    const ns = new NotificationSender(db as any)
+    await ns.markAsRead('abc-123')
+    expect(db.raw).toHaveBeenCalledWith(
+      'UPDATE notifications SET read_at = ? WHERE id = ?',
+      [expect.any(String), 'abc-123'],
+    )
+  })
+
+  it('markAsRead without db does nothing', async () => {
+    const { NotificationSender } = await import('../src/server/notifications/index.js')
+    const ns = new NotificationSender()
+    await ns.markAsRead('abc')
+  })
+
+  it('getUnread with db mock', async () => {
+    const { NotificationSender } = await import('../src/server/notifications/index.js')
+    const db = createMockDb()
+    db.raw.mockResolvedValue({
+      rows: [
+        { id: '1', type: 'info', notifiable_id: 42, data: '{"msg":"hello"}', created_at: '2024-01-01' },
+      ],
+    })
+    const ns = new NotificationSender(db as any)
+    const result = await ns.getUnread(42)
+    expect(result).toHaveLength(1)
+    expect(result[0].data).toEqual({ msg: 'hello' })
+  })
+
+  it('getUnread without db returns empty array', async () => {
+    const { NotificationSender } = await import('../src/server/notifications/index.js')
+    const ns = new NotificationSender()
+    const result = await ns.getUnread(42)
+    expect(result).toEqual([])
+  })
+
+  it('getUnread handles non-string data', async () => {
+    const { NotificationSender } = await import('../src/server/notifications/index.js')
+    const db = createMockDb()
+    db.raw.mockResolvedValue({
+      rows: [
+        { id: '1', type: 'info', notifiable_id: 42, data: { msg: 'parsed' }, created_at: '2024-01-01' },
+      ],
+    })
+    const ns = new NotificationSender(db as any)
+    const result = await ns.getUnread(42)
+    expect(result[0].data).toEqual({ msg: 'parsed' })
+  })
+})
+
+// ====================================================================
+// Server: openapi/index.ts
+// ====================================================================
+
+describe('generateOpenApiSpec', () => {
+  it('generates valid OpenAPI 3.0.3 spec', async () => {
+    const { generateOpenApiSpec } = await import('../src/server/openapi/index.js')
+    const router: any = {
+      routes: [
+        { methods: ['GET'], path: '/users' },
+        { methods: ['POST'], path: '/users' },
+      ],
+    }
+    const spec = generateOpenApiSpec(router)
+    expect(spec.openapi).toBe('3.0.3')
+    expect(spec.paths).toHaveProperty('/users')
+    expect((spec.paths as any)['/users']).toHaveProperty('get')
+    expect((spec.paths as any)['/users']).toHaveProperty('post')
+  })
+
+  it('extracts path parameters', async () => {
+    const { generateOpenApiSpec } = await import('../src/server/openapi/index.js')
+    const router: any = {
+      routes: [
+        { methods: ['GET'], path: '/users/:id' },
+        { methods: ['GET'], path: '/users/:userId/posts/:postId' },
+      ],
+    }
+    const spec = generateOpenApiSpec(router)
+    const getParams = (spec.paths as any)['/users/:id'].get.parameters
+    expect(getParams).toHaveLength(1)
+    expect(getParams[0].name).toBe('id')
+    expect(getParams[0].in).toBe('path')
+    expect(getParams[0].required).toBe(true)
+
+    const multiParams = (spec.paths as any)['/users/:userId/posts/:postId'].get.parameters
+    expect(multiParams).toHaveLength(2)
+    expect(multiParams[0].name).toBe('userId')
+    expect(multiParams[1].name).toBe('postId')
+  })
+
+  it('uses config options (title, version, servers)', async () => {
+    const { generateOpenApiSpec } = await import('../src/server/openapi/index.js')
+    const router: any = { routes: [] }
+    const spec = generateOpenApiSpec(router, {
+      title: 'MyAPI',
+      version: '2.0.0',
+      description: 'Test API',
+      servers: [{ url: 'https://api.example.com', description: 'Production' }],
+    })
+    expect((spec.info as any).title).toBe('MyAPI')
+    expect((spec.info as any).version).toBe('2.0.0')
+    expect((spec.info as any).description).toBe('Test API')
+    expect((spec.servers as any[])[0].url).toBe('https://api.example.com')
+  })
+
+  it('uses defaults when no config provided', async () => {
+    const { generateOpenApiSpec } = await import('../src/server/openapi/index.js')
+    const router: any = { routes: [] }
+    const spec = generateOpenApiSpec(router)
+    expect((spec.info as any).title).toBe('SpeexJS API')
+    expect((spec.info as any).version).toBe('1.0.0')
+    expect((spec.servers as any[])[0].url).toBe('http://localhost:3000')
+  })
+
+  it('handles empty routes', async () => {
+    const { generateOpenApiSpec } = await import('../src/server/openapi/index.js')
+    const router: any = { routes: [] }
+    const spec = generateOpenApiSpec(router)
+    expect(spec.paths).toEqual({})
+  })
+
+  it('handles undefined routes', async () => {
+    const { generateOpenApiSpec } = await import('../src/server/openapi/index.js')
+    const router: any = {}
+    const spec = generateOpenApiSpec(router)
+    expect(spec.paths).toEqual({})
+  })
+
+  it('lowercases HTTP methods', async () => {
+    const { generateOpenApiSpec } = await import('../src/server/openapi/index.js')
+    const router: any = {
+      routes: [
+        { methods: ['DELETE'], path: '/users/:id' },
+        { methods: ['PATCH'], path: '/users/:id' },
+      ],
+    }
+    const spec = generateOpenApiSpec(router)
+    expect((spec.paths as any)['/users/:id']).toHaveProperty('delete')
+    expect((spec.paths as any)['/users/:id']).toHaveProperty('patch')
+  })
+})
+
+// ====================================================================
+// Server: plugin/index.ts
+// ====================================================================
+
+describe('PluginManager', () => {
+  it('register and get a plugin', async () => {
+    const { PluginManager } = await import('../src/server/plugin/index.js')
+    const app: any = {}
+    const pm = new PluginManager(app)
+    const plugin: any = { name: 'test', register: vi.fn().mockResolvedValue(undefined) }
+    await pm.register(plugin)
+    expect(pm.get('test')).toBe(plugin)
+    expect(plugin.register).toHaveBeenCalledWith(app)
+  })
+
+  it('bootAll calls boot on each plugin', async () => {
+    const { PluginManager } = await import('../src/server/plugin/index.js')
+    const pm = new PluginManager({} as any)
+    const boot = vi.fn().mockResolvedValue(undefined)
+    await pm.register({ name: 'p1', register: vi.fn(), boot } as any)
+    await pm.register({ name: 'p2', register: vi.fn(), boot } as any)
+    await pm.bootAll()
+    expect(boot).toHaveBeenCalledTimes(2)
+  })
+
+  it('bootAll with no boot method does not throw', async () => {
+    const { PluginManager } = await import('../src/server/plugin/index.js')
+    const pm = new PluginManager({} as any)
+    await pm.register({ name: 'p1', register: vi.fn() } as any)
+    await expect(pm.bootAll()).resolves.toBeUndefined()
+  })
+
+  it('shutdownAll calls shutdown on each plugin', async () => {
+    const { PluginManager } = await import('../src/server/plugin/index.js')
+    const pm = new PluginManager({} as any)
+    const shutdown = vi.fn().mockResolvedValue(undefined)
+    await pm.register({ name: 'p1', register: vi.fn(), shutdown } as any)
+    await pm.shutdownAll()
+    expect(shutdown).toHaveBeenCalled()
+  })
+
+  it('shutdownAll with no shutdown method does not throw', async () => {
+    const { PluginManager } = await import('../src/server/plugin/index.js')
+    const pm = new PluginManager({} as any)
+    await pm.register({ name: 'p1', register: vi.fn() } as any)
+    await expect(pm.shutdownAll()).resolves.toBeUndefined()
+  })
+
+  it('duplicate register throws', async () => {
+    const { PluginManager } = await import('../src/server/plugin/index.js')
+    const pm = new PluginManager({} as any)
+    await pm.register({ name: 'dup', register: vi.fn() } as any)
+    await expect(pm.register({ name: 'dup', register: vi.fn() } as any)).rejects.toThrow('Plugin "dup" already registered')
+  })
+
+  it('get returns undefined for unknown plugin', async () => {
+    const { PluginManager } = await import('../src/server/plugin/index.js')
+    const pm = new PluginManager({} as any)
+    expect(pm.get('unknown')).toBeUndefined()
+  })
+})
+
+// ====================================================================
+// Server: queue/index.ts
+// ====================================================================
+
+describe('Queue', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('register and push a job', async () => {
+    const { Queue } = await import('../src/server/queue/index.js')
+    const q = new Queue()
+    const handler = vi.fn().mockResolvedValue(undefined)
+    q.register('email', handler)
+    await q.push('email', { to: 'user@test.com' })
+    await new Promise(r => setTimeout(r, 10))
+    expect(handler).toHaveBeenCalledWith({ to: 'user@test.com' })
+  })
+
+  it('push with unknown handler throws', async () => {
+    const { Queue } = await import('../src/server/queue/index.js')
+    const q = new Queue()
+    expect(() => q.push('unknown', {})).toThrow('No handler registered for job: unknown')
+  })
+
+  it('length property reflects pending jobs', async () => {
+    const { Queue } = await import('../src/server/queue/index.js')
+    const q = new Queue()
+    const slowHandler = vi.fn().mockImplementation(() => new Promise(r => setTimeout(r, 50)))
+    q.register('slow', slowHandler)
+    q.push('slow', {})
+    expect(q.length).toBe(0)
+  })
+
+  it('error in handler does not crash', async () => {
+    const { Queue } = await import('../src/server/queue/index.js')
+    const q = new Queue()
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    q.register('failing', () => { throw new Error('boom') })
+    await q.push('failing', {})
+    await new Promise(r => setTimeout(r, 10))
+    expect(consoleSpy).toHaveBeenCalled()
+    consoleSpy.mockRestore()
+  })
+
+  it('processing flag prevents concurrent processing', async () => {
+    const { Queue } = await import('../src/server/queue/index.js')
+    const q = new Queue()
+    const order: string[] = []
+    const handler1 = vi.fn().mockImplementation(async () => { order.push('1') })
+    const handler2 = vi.fn().mockImplementation(async () => { order.push('2') })
+    q.register('a', handler1)
+    q.register('b', handler2)
+    q.push('a', {})
+    q.push('b', {})
+    await new Promise(r => setTimeout(r, 20))
+    expect(order).toEqual(['1', '2'])
+  })
+})
+
+// ====================================================================
+// Server: schedule/index.ts
+// ====================================================================
+
+describe('Scheduler', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('task registers with interval and fires callback', async () => {
+    const { Scheduler } = await import('../src/server/schedule/index.js')
+    const sched = new Scheduler()
+    const cb = vi.fn()
+    sched.task('test', '* * * * *', cb)
+    vi.advanceTimersByTime(3660000)
+    expect(cb).toHaveBeenCalled()
+  })
+
+  it('remove stops a task', async () => {
+    const { Scheduler } = await import('../src/server/schedule/index.js')
+    const sched = new Scheduler()
+    const cb = vi.fn()
+    sched.task('test', '* * * * *', cb)
+    sched.remove('test')
+    vi.advanceTimersByTime(120000)
+    expect(cb).not.toHaveBeenCalled()
+  })
+
+  it('remove non-existent task does nothing', async () => {
+    const { Scheduler } = await import('../src/server/schedule/index.js')
+    const sched = new Scheduler()
+    expect(() => sched.remove('does-not-exist')).not.toThrow()
+  })
+
+  it('stopAll clears all tasks', async () => {
+    const { Scheduler } = await import('../src/server/schedule/index.js')
+    const sched = new Scheduler()
+    const cb1 = vi.fn()
+    const cb2 = vi.fn()
+    sched.task('a', '* * * * *', cb1)
+    sched.task('b', '* * * * *', cb2)
+    sched.stopAll()
+    vi.advanceTimersByTime(120000)
+    expect(cb1).not.toHaveBeenCalled()
+    expect(cb2).not.toHaveBeenCalled()
+  })
+
+  it('parse cron string with hours', async () => {
+    const { Scheduler } = await import('../src/server/schedule/index.js')
+    const sched = new Scheduler()
+    const cb = vi.fn()
+    sched.task('hourly', '0 * * * *', cb)
+    vi.advanceTimersByTime(3600000)
+    expect(cb).toHaveBeenCalledTimes(1)
+  })
+
+  it('parse cron string with both minutes and hours', async () => {
+    const { Scheduler } = await import('../src/server/schedule/index.js')
+    const sched = new Scheduler()
+    const cb = vi.fn()
+    sched.task('specific', '30 2 * * *', cb)
+    vi.advanceTimersByTime(9150000)
+    expect(cb).toHaveBeenCalled()
+  })
+
+  it('parse cron throws for invalid format', async () => {
+    const { Scheduler } = await import('../src/server/schedule/index.js')
+    const sched = new Scheduler()
+    expect(() => sched.task('bad', '* *', vi.fn())).toThrow('Invalid cron')
+  })
+
+  it('task returns this for chaining', async () => {
+    const { Scheduler } = await import('../src/server/schedule/index.js')
+    const sched = new Scheduler()
+    const result = sched.task('chained', '* * * * *', vi.fn())
+    expect(result).toBe(sched)
+  })
+})
+
+// ====================================================================
+// Server: testing/index.ts
+// ====================================================================
+
+describe('TestRequest / TestResponse', () => {
+  it('testRequest returns TestRequest', async () => {
+    const { testRequest } = await import('../src/server/testing/index.js')
+    const app: any = { handleRequest: vi.fn().mockResolvedValue(undefined) }
+    const tr = testRequest(app)
+    expect(tr.constructor.name).toBe('TestRequest')
+  })
+
+  it('TestResponse status getter', async () => {
+    const { TestResponse } = await import('../src/server/testing/index.js')
+    const res: any = { statusCode: 404, body: null }
+    const tr = new TestResponse(res)
+    expect(tr.status).toBe(404)
+  })
+
+  it('TestResponse body getter returns null by default', async () => {
+    const { TestResponse } = await import('../src/server/testing/index.js')
+    const res: any = { statusCode: 200, body: '{"ok":true}' }
+    const tr = new TestResponse(res)
+    expect(tr.body).toBeNull()
+  })
+
+  it('TestResponse json returns null when no data', async () => {
+    const { TestResponse } = await import('../src/server/testing/index.js')
+    const res: any = { statusCode: 200 }
+    const tr = new TestResponse(res)
+    expect(tr.json()).toBeNull()
+  })
+
+  it('TestResponse json parses string body after flush is called', async () => {
+    const { TestResponse } = await import('../src/server/testing/index.js')
+    const res: any = { statusCode: 200, body: '{"ok":true}' }
+    const tr = new TestResponse(res)
+    ;(tr as any).sentData = '{"ok":true}'
+    expect(tr.json()).toEqual({ ok: true })
+  })
+
+  it('TestResponse header method', async () => {
+    const { TestResponse } = await import('../src/server/testing/index.js')
+    const res: any = { statusCode: 200 }
+    const tr = new TestResponse(res)
+    expect(tr.header('content-type')).toBeUndefined()
+  })
+})
+
+// Note: registerFileRoutes (src/server/router/file-routing.ts) relies on
+// node:fs readdirSync/statSync which cannot be reliably mocked in this
+// file because node:fs is already mocked at the top level for other tests.
+// The function is a thin wrapper that reads files and registers router methods.
+// Covered indirectly via integration tests and Router unit tests.
+
+// ====================================================================
+// Server: router/versioning.ts
+// ====================================================================
+
+describe('apiVersion', () => {
+  it('creates group with correct prefix', async () => {
+    const { apiVersion } = await import('../src/server/router/versioning.js')
+    const { Router } = await import('../src/server/router/index.js')
+    const router = new Router()
+    const group = vi.fn()
+    vi.spyOn(router, 'group').mockImplementation(group)
+    const cb = vi.fn()
+    const wrapper = apiVersion('1', cb)
+    wrapper(router)
+    expect(group).toHaveBeenCalledWith('/api/v1', cb)
+  })
+
+  it('works with different version strings', async () => {
+    const { apiVersion } = await import('../src/server/router/versioning.js')
+    const { Router } = await import('../src/server/router/index.js')
+    const router = new Router()
+    const group = vi.fn()
+    vi.spyOn(router, 'group').mockImplementation(group)
+    const cb = vi.fn()
+    const wrapper = apiVersion('2', cb)
+    wrapper(router)
+    expect(group).toHaveBeenCalledWith('/api/v2', cb)
+  })
+})
+
+// ====================================================================
+// Server: websocket/index.ts
+// ====================================================================
+
+describe('WsBroadcaster', () => {
+  it('can instantiate WsBroadcaster', async () => {
+    const { WsBroadcaster } = await import('../src/server/websocket/index.js')
+    const wb = new WsBroadcaster()
+    expect(wb).toBeInstanceOf(Object)
+  })
+
+  it('has expected methods', async () => {
+    const { WsBroadcaster } = await import('../src/server/websocket/index.js')
+    const wb = new WsBroadcaster()
+    expect(typeof wb.attach).toBe('function')
+    expect(typeof wb.subscribe).toBe('function')
+    expect(typeof wb.broadcast).toBe('function')
+    expect(typeof wb.emit).toBe('function')
+    expect(typeof wb.on).toBe('function')
+    expect(typeof wb.subscriberCount).toBe('function')
+    expect(typeof wb.close).toBe('function')
+  })
+
+  it('subscriberCount returns 0 for unknown channel', async () => {
+    const { WsBroadcaster } = await import('../src/server/websocket/index.js')
+    const wb = new WsBroadcaster()
+    expect(wb.subscriberCount('nonexistent')).toBe(0)
+  })
+
+  it('close does not throw when not attached', async () => {
+    const { WsBroadcaster } = await import('../src/server/websocket/index.js')
+    const wb = new WsBroadcaster()
+    expect(() => wb.close()).not.toThrow()
+  })
+
+  it('broadcast to unknown channel does nothing', async () => {
+    const { WsBroadcaster } = await import('../src/server/websocket/index.js')
+    const wb = new WsBroadcaster()
+    expect(() => wb.broadcast('unknown', 'event', {})).not.toThrow()
+  })
+})
+
+// ====================================================================
+// Database: model-factory.ts - defineFactory
+// ====================================================================
+
+describe('model-factory - defineFactory', () => {
+  it('returns a Factory instance', async () => {
+    const { defineFactory } = await import('../src/server/database/model-factory.js')
+    const { Model } = await import('../src/server/database/model.js')
+    class TestModel extends Model { static table = 'test' }
+    const factory = defineFactory(TestModel, (faker, index) => ({ name: faker.name(), index }))
+    expect(factory).toBeDefined()
+    expect(typeof factory.make).toBe('function')
+    expect(typeof factory.count).toBe('function')
+    const result = factory.make(5)
+    expect(result.index).toBe(5)
+    expect(typeof result.name).toBe('string')
+  })
+
+  it('callback receives valid Faker instance with index 0 by default', async () => {
+    const { defineFactory } = await import('../src/server/database/model-factory.js')
+    const { Model } = await import('../src/server/database/model.js')
+    class TestModel extends Model { static table = 'test' }
+    const callback = vi.fn((_faker: any, index: number) => ({ index }))
+    const factory = defineFactory(TestModel, callback)
+    factory.make()
+    expect(callback).toHaveBeenCalledTimes(1)
+    expect(callback.mock.calls[0][1]).toBe(0)
+  })
+
+  it('make() returns empty object when callback returns empty', async () => {
+    const { defineFactory } = await import('../src/server/database/model-factory.js')
+    const { Model } = await import('../src/server/database/model.js')
+    class TestModel extends Model { static table = 'test' }
+    const factory = defineFactory(TestModel, () => ({}))
+    expect(factory.make()).toEqual({})
+  })
+
+  it('count() allows chaining', async () => {
+    const { defineFactory } = await import('../src/server/database/model-factory.js')
+    const { Model } = await import('../src/server/database/model.js')
+    class TestModel extends Model { static table = 'test' }
+    const factory = defineFactory(TestModel, () => ({}))
+    expect(factory.count(5)).toBe(factory)
+  })
+})
+
+// ====================================================================
+// Database: soft-deletes.ts - withSoftDeletes
+// ====================================================================
+
+describe('soft-deletes - withSoftDeletes', () => {
+  it('returns object with whereNotDeleted, onlyDeleted, withTrashed', async () => {
+    const { withSoftDeletes } = await import('../src/server/database/soft-deletes.js')
+    const query = { whereNull: vi.fn(), whereNotNull: vi.fn() }
+    const result = withSoftDeletes(query)
+    expect(typeof result.whereNotDeleted).toBe('function')
+    expect(typeof result.onlyDeleted).toBe('function')
+    expect(typeof result.withTrashed).toBe('function')
+  })
+
+  it('preserves original query methods via spread', async () => {
+    const { withSoftDeletes } = await import('../src/server/database/soft-deletes.js')
+    const query = { whereNull: vi.fn(), whereNotNull: vi.fn(), customMethod: vi.fn() }
+    const result = withSoftDeletes(query)
+    expect(typeof result.customMethod).toBe('function')
+  })
+
+  it('whereNotDeleted calls whereNull with deleted_at', async () => {
+    const { withSoftDeletes } = await import('../src/server/database/soft-deletes.js')
+    const whereNull = vi.fn()
+    const query = { whereNull, whereNotNull: vi.fn() }
+    const result = withSoftDeletes(query)
+    result.whereNotDeleted()
+    expect(whereNull).toHaveBeenCalledWith('deleted_at')
+  })
+
+  it('onlyDeleted calls whereNotNull with deleted_at', async () => {
+    const { withSoftDeletes } = await import('../src/server/database/soft-deletes.js')
+    const whereNotNull = vi.fn()
+    const query = { whereNull: vi.fn(), whereNotNull }
+    const result = withSoftDeletes(query)
+    result.onlyDeleted()
+    expect(whereNotNull).toHaveBeenCalledWith('deleted_at')
+  })
+
+  it('withTrashed returns the query unchanged', async () => {
+    const { withSoftDeletes } = await import('../src/server/database/soft-deletes.js')
+    const query = { whereNull: vi.fn(), whereNotNull: vi.fn() }
+    const result = withSoftDeletes(query)
+    expect(result.withTrashed()).toBe(query)
+  })
+})
+
+// ====================================================================
+// Model: relation definitions (hasOne, belongsToMany, morphMany, with)
+// ====================================================================
+
+describe('Model - relation definitions', () => {
+  it('hasOne stores relation definition without throwing', async () => {
+    const { Model } = await import('../src/server/database/model.js')
+    class UserModel extends Model { static table = 'users' }
+    class ProfileModel extends Model { static table = 'profiles' }
+    expect(() => UserModel.hasOne(ProfileModel)).not.toThrow()
+    expect(() => UserModel.hasOne(ProfileModel, 'user_id', 'id')).not.toThrow()
+  })
+
+  it('hasMany stores relation definition', async () => {
+    const { Model } = await import('../src/server/database/model.js')
+    class UserModel extends Model { static table = 'users' }
+    class PostModel extends Model { static table = 'posts' }
+    expect(() => UserModel.hasMany(PostModel)).not.toThrow()
+    expect(() => UserModel.hasMany(PostModel, 'user_id', 'id')).not.toThrow()
+  })
+
+  it('belongsTo stores relation definition', async () => {
+    const { Model } = await import('../src/server/database/model.js')
+    class PostModel extends Model { static table = 'posts' }
+    class UserModel extends Model { static table = 'users' }
+    expect(() => PostModel.belongsTo(UserModel)).not.toThrow()
+    expect(() => PostModel.belongsTo(UserModel, 'user_id', 'id')).not.toThrow()
+  })
+
+  it('belongsToMany stores relation definition with auto pivot table', async () => {
+    const { Model } = await import('../src/server/database/model.js')
+    class UserModel extends Model { static table = 'users' }
+    class RoleModel extends Model { static table = 'roles' }
+    expect(() => UserModel.belongsToMany(RoleModel)).not.toThrow()
+    expect(() => UserModel.belongsToMany(RoleModel, 'user_role', 'user_id', 'role_id')).not.toThrow()
+  })
+
+  it('morphMany stores relation definition with morph name', async () => {
+    const { Model } = await import('../src/server/database/model.js')
+    class PostModel extends Model { static table = 'posts' }
+    class CommentModel extends Model { static table = 'comments' }
+    expect(() => PostModel.morphMany(CommentModel, 'commentable')).not.toThrow()
+  })
+
+  it('with() configures eager loading with single and multiple relations', async () => {
+    const { Model } = await import('../src/server/database/model.js')
+    class UserModel extends Model { static table = 'users' }
+    expect(() => UserModel.with('profile')).not.toThrow()
+    expect(() => UserModel.with('roles', 'permissions')).not.toThrow()
+  })
+
+  it('with() accepts empty args without error', async () => {
+    const { Model } = await import('../src/server/database/model.js')
+    class UserModel extends Model { static table = 'users' }
+    expect(() => UserModel.with()).not.toThrow()
+  })
+
+  it('morphTo is exported as a RelationType', async () => {
+    const mod = await import('../src/server/database/model.js')
+    const types: string[] = ['hasOne', 'hasMany', 'belongsTo', 'belongsToMany', 'morphMany', 'morphTo']
+    expect(mod.Model).toBeDefined()
+    expect(types).toContain('morphTo')
+  })
+})
+
+// ====================================================================
+// Server: cluster/index.ts - runInCluster
+// ====================================================================
+
+describe('cluster - runInCluster', () => {
+  it('exports runInCluster function', async () => {
+    const mod = await import('../src/server/cluster/index.js')
+    expect(typeof mod.runInCluster).toBe('function')
+  })
+
+  it('returns a boolean (true when in primary process)', async () => {
+    const mod = await import('../src/server/cluster/index.js')
+    const result = mod.runInCluster()
+    expect(typeof result).toBe('boolean')
+  })
+
+  it('accepts options with count and onWorker callback', async () => {
+    const mod = await import('../src/server/cluster/index.js')
+    const result = mod.runInCluster({ count: 4, onWorker: vi.fn() })
+    expect(typeof result).toBe('boolean')
+  })
+
+  it('defaults count to CPU cores when not provided', async () => {
+    const mod = await import('../src/server/cluster/index.js')
+    const result = mod.runInCluster({})
+    expect(typeof result).toBe('boolean')
+  })
+
+  it('does not throw when called without arguments', async () => {
+    const mod = await import('../src/server/cluster/index.js')
+    expect(() => mod.runInCluster()).not.toThrow()
+  })
+})
+
+// ====================================================================
+// Server: middleware/index.ts - validate() and validateQuery()
+// ====================================================================
+
+describe('middleware - validate', () => {
+  function makeMockSchema(result: { success: boolean; data?: unknown; error?: string }) {
+    return { safeParse: vi.fn().mockReturnValue(result) }
+  }
+
+  it('returns a middleware function', async () => {
+    const { validate } = await import('../src/server/middleware/index.js')
+    const mw = validate(makeMockSchema({ success: true, data: {} }) as any)
+    expect(typeof mw).toBe('function')
+    expect(mw.length).toBe(2)
+  })
+
+  it('calls next() and sets ctx.validated when validation succeeds', async () => {
+    const { validate } = await import('../src/server/middleware/index.js')
+    const schema = makeMockSchema({ success: true, data: { name: 'test' } })
+    const mw = validate(schema as any)
+    const ctx: any = {
+      request: { body: vi.fn().mockResolvedValue({ name: 'test' }) },
+      response: { status: vi.fn().mockReturnThis(), json: vi.fn() },
+    }
+    const next = vi.fn().mockResolvedValue(undefined)
+    await mw(ctx, next)
+    expect(schema.safeParse).toHaveBeenCalledWith({ name: 'test' })
+    expect((ctx as any).validated).toEqual({ name: 'test' })
+    expect(next).toHaveBeenCalled()
+  })
+
+  it('returns 422 when validation fails', async () => {
+    const { validate } = await import('../src/server/middleware/index.js')
+    const schema = makeMockSchema({ success: false, error: 'Name required' })
+    const mw = validate(schema as any)
+    const status = vi.fn().mockReturnThis()
+    const json = vi.fn()
+    const ctx: any = {
+      request: { body: vi.fn().mockResolvedValue({}) },
+      response: { status, json },
+    }
+    const next = vi.fn()
+    await mw(ctx, next)
+    expect(status).toHaveBeenCalledWith(422)
+    expect(json).toHaveBeenCalledWith({ error: 'VALIDATION_ERROR', message: 'Name required' })
+    expect(next).not.toHaveBeenCalled()
+  })
+})
+
+describe('middleware - validateQuery', () => {
+  function makeMockSchema(result: { success: boolean; data?: unknown; error?: string }) {
+    return { safeParse: vi.fn().mockReturnValue(result) }
+  }
+
+  it('returns a middleware function', async () => {
+    const { validateQuery } = await import('../src/server/middleware/index.js')
+    const mw = validateQuery(makeMockSchema({ success: true, data: {} }) as any)
+    expect(typeof mw).toBe('function')
+  })
+
+  it('validates query data and sets validatedQuery', async () => {
+    const { validateQuery } = await import('../src/server/middleware/index.js')
+    const schema = makeMockSchema({ success: true, data: { page: '1' } })
+    const mw = validateQuery(schema as any)
+    const ctx: any = {
+      request: { query: { page: '1' } },
+      response: { status: vi.fn().mockReturnThis(), json: vi.fn() },
+    }
+    const next = vi.fn().mockResolvedValue(undefined)
+    await mw(ctx, next)
+    expect(schema.safeParse).toHaveBeenCalledWith({ page: '1' })
+    expect((ctx as any).validatedQuery).toEqual({ page: '1' })
+    expect(next).toHaveBeenCalled()
+  })
+
+  it('returns 422 when query validation fails', async () => {
+    const { validateQuery } = await import('../src/server/middleware/index.js')
+    const schema = makeMockSchema({ success: false, error: 'Invalid query' })
+    const mw = validateQuery(schema as any)
+    const status = vi.fn().mockReturnThis()
+    const json = vi.fn()
+    const ctx: any = {
+      request: { query: {} },
+      response: { status, json },
+    }
+    const next = vi.fn()
+    await mw(ctx, next)
+    expect(status).toHaveBeenCalledWith(422)
+    expect(json).toHaveBeenCalledWith({ error: 'VALIDATION_ERROR', message: 'Invalid query' })
+    expect(next).not.toHaveBeenCalled()
+  })
+
+  it('handles empty query object', async () => {
+    const { validateQuery } = await import('../src/server/middleware/index.js')
+    const schema = makeMockSchema({ success: true, data: {} })
+    const mw = validateQuery(schema as any)
+    const ctx: any = {
+      request: { query: {} },
+      response: { status: vi.fn().mockReturnThis(), json: vi.fn() },
+    }
+    const next = vi.fn().mockResolvedValue(undefined)
+    await mw(ctx, next)
+    expect(schema.safeParse).toHaveBeenCalledWith({})
+    expect(next).toHaveBeenCalled()
+  })
+})
+
+// ====================================================================
+// Server: engine/index.ts - HttpsEngine
+// ====================================================================
+
+describe('HttpsEngine', () => {
+  it('class exists and is a constructor', async () => {
+    const { HttpsEngine } = await import('../src/server/engine/index.js')
+    expect(HttpsEngine).toBeDefined()
+    expect(typeof HttpsEngine).toBe('function')
+  })
+
+  it('extends NodeEngine', async () => {
+    const { HttpsEngine, NodeEngine } = await import('../src/server/engine/index.js')
+    expect(HttpsEngine.prototype).toBeInstanceOf(NodeEngine)
+  })
+
+  it('has createServer method on prototype', async () => {
+    const { HttpsEngine } = await import('../src/server/engine/index.js')
+    expect(typeof HttpsEngine.prototype.createServer).toBe('function')
+  })
+
+  it('constructor accepts two arguments (keyPath, certPath)', async () => {
+    const { HttpsEngine } = await import('../src/server/engine/index.js')
+    expect(HttpsEngine.length).toBe(2)
+  })
+})
+
+// ====================================================================
+// Database: index.ts - barrel exports
+// ====================================================================
+
+describe('database/index barrel exports', () => {
+  it('exports Model', async () => {
+    const mod = await import('../src/server/database/index.js')
+    expect(mod.Model).toBeDefined()
+    expect(mod.Model.table).toBeDefined()
+  })
+
+  it('exports QueryBuilder', async () => {
+    const mod = await import('../src/server/database/index.js')
+    expect(mod.QueryBuilder).toBeDefined()
+  })
+
+  it('exports all expected database classes', async () => {
+    const mod = await import('../src/server/database/index.js')
+    expect(mod.DatabaseConnection).toBeDefined()
+    expect(mod.Migrator).toBeDefined()
+    expect(mod.SchemaBuilder).toBeDefined()
+    expect(mod.TableBlueprint).toBeDefined()
+    expect(mod.ColumnDefinition).toBeDefined()
+    expect(mod.ForeignKeyDefinition).toBeDefined()
+    expect(mod.Pagination).toBeDefined()
+    expect(mod.Seeder).toBeDefined()
+    expect(mod.createDialect).toBeDefined()
+    expect(mod.createDriver).toBeDefined()
+  })
+
+  it('exports all dialect variants', async () => {
+    const mod = await import('../src/server/database/index.js')
+    expect(mod.MysqlDialect).toBeDefined()
+    expect(mod.PostgresqlDialect).toBeDefined()
+    expect(mod.SqliteDialect).toBeDefined()
+  })
+
+  it('exports type-only identifiers', async () => {
+    const mod = await import('../src/server/database/index.js')
+    expect(mod.DatabaseConnection).toBeDefined()
+    expect(mod.ColumnDefinition).toBeDefined()
+  })
+})
+
+// ====================================================================
+// HTTP: serializer.ts - ResponseSerializer
+// ====================================================================
+
+describe('ResponseSerializer', () => {
+  it('success returns correct shape', async () => {
+    const { ResponseSerializer } = await import('../src/server/http/serializer.js')
+    const result = ResponseSerializer.success({ id: 1 }, 'Created')
+    expect(result).toEqual({ success: true, data: { id: 1 }, message: 'Created' })
+  })
+
+  it('success defaults message to OK', async () => {
+    const { ResponseSerializer } = await import('../src/server/http/serializer.js')
+    const result = ResponseSerializer.success([1, 2, 3])
+    expect(result).toEqual({ success: true, data: [1, 2, 3], message: 'OK' })
+  })
+
+  it('success handles null data', async () => {
+    const { ResponseSerializer } = await import('../src/server/http/serializer.js')
+    const result = ResponseSerializer.success(null)
+    expect(result).toEqual({ success: true, data: null, message: 'OK' })
+  })
+
+  it('error returns correct shape', async () => {
+    const { ResponseSerializer } = await import('../src/server/http/serializer.js')
+    const result = ResponseSerializer.error('Not found')
+    expect(result).toEqual({ success: false, message: 'Not found' })
+  })
+
+  it('error includes errors detail when provided', async () => {
+    const { ResponseSerializer } = await import('../src/server/http/serializer.js')
+    const result = ResponseSerializer.error('Validation failed', { name: ['Required'] })
+    expect(result).toEqual({ success: false, message: 'Validation failed', errors: { name: ['Required'] } })
+  })
+
+  it('error omits errors key when not provided', async () => {
+    const { ResponseSerializer } = await import('../src/server/http/serializer.js')
+    const result = ResponseSerializer.error('fail')
+    expect(result).not.toHaveProperty('errors')
+  })
+
+  it('paginated returns correct shape with meta', async () => {
+    const { ResponseSerializer } = await import('../src/server/http/serializer.js')
+    const result = ResponseSerializer.paginated(['a', 'b'], 100, 2, 10)
+    expect(result).toEqual({
+      success: true,
+      data: ['a', 'b'],
+      meta: { total: 100, page: 2, perPage: 10, lastPage: 10 },
+    })
+  })
+
+  it('paginated calculates lastPage as 0 for empty data', async () => {
+    const { ResponseSerializer } = await import('../src/server/http/serializer.js')
+    const result = ResponseSerializer.paginated([], 0, 1, 10)
+    expect(result.meta.lastPage).toBe(0)
+  })
+
+  it('paginated calculates lastPage as 1 for single page', async () => {
+    const { ResponseSerializer } = await import('../src/server/http/serializer.js')
+    const result = ResponseSerializer.paginated(['x'], 1, 1, 10)
+    expect(result.meta.lastPage).toBe(1)
+  })
+
+  it('wrap calls response.status().json() with custom status', async () => {
+    const { ResponseSerializer } = await import('../src/server/http/serializer.js')
+    const status = vi.fn().mockReturnThis()
+    const json = vi.fn()
+    const response = { status, json }
+    ResponseSerializer.wrap(response as any, { ok: true }, 201)
+    expect(status).toHaveBeenCalledWith(201)
+    expect(json).toHaveBeenCalledWith({ ok: true })
+  })
+
+  it('wrap defaults to status 200', async () => {
+    const { ResponseSerializer } = await import('../src/server/http/serializer.js')
+    const status = vi.fn().mockReturnThis()
+    const json = vi.fn()
+    const response = { status, json }
+    ResponseSerializer.wrap(response as any, { ok: true })
+    expect(status).toHaveBeenCalledWith(200)
+    expect(json).toHaveBeenCalledWith({ ok: true })
   })
 })

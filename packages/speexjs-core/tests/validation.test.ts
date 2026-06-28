@@ -71,6 +71,93 @@ describe('isURL', () => {
   it('rejects just protocol', () => {
     expect(isURL('https://')).toBe(false)
   })
+
+  it('validates URL with port', () => {
+    expect(isURL('https://example.com:8080')).toBe(true)
+  })
+
+  it('validates IPv4 as hostname', () => {
+    expect(isURL('http://127.0.0.1')).toBe(true)
+  })
+
+  it('validates IPv4 with path', () => {
+    expect(isURL('http://127.0.0.1/path')).toBe(true)
+  })
+
+  it('validates IPv6 literal', () => {
+    expect(isURL('http://[::1]')).toBe(true)
+  })
+
+  it('validates IPv6 literal with port', () => {
+    expect(isURL('http://[::1]:8080')).toBe(true)
+  })
+
+  it('validates localhost', () => {
+    expect(isURL('http://localhost')).toBe(true)
+  })
+
+  it('validates localhost with path', () => {
+    expect(isURL('http://localhost/path')).toBe(true)
+  })
+
+  it('validates URL with auth', () => {
+    expect(isURL('http://user:pass@example.com')).toBe(true)
+  })
+
+  it('validates URL with fragment', () => {
+    expect(isURL('https://example.com#section')).toBe(true)
+  })
+
+  it('validates long hostname with many labels', () => {
+    expect(isURL('https://sub.domain.example.com')).toBe(true)
+  })
+})
+
+describe('isEmail extra coverage', () => {
+  it('validates quoted local part', () => {
+    expect(isEmail('"quoted@local"@example.com')).toBe(true)
+  })
+
+  it('validates quoted local with escaped quote', () => {
+    expect(isEmail('"escaped\\"quote"@example.com')).toBe(true)
+  })
+
+  it('rejects unterminated quoted local part', () => {
+    expect(isEmail('"unterminated@example.com')).toBe(false)
+  })
+
+  it('rejects email exceeding 254 characters', () => {
+    const local = 'a'.repeat(64)
+    const domain = 'b'.repeat(189) + '.com'
+    const email = local + '@' + domain
+    expect(email.length).toBeGreaterThan(254)
+    expect(isEmail(email)).toBe(false)
+  })
+
+  it('rejects local part exceeding 64 characters', () => {
+    const local = 'a'.repeat(65)
+    expect(isEmail(local + '@example.com')).toBe(false)
+  })
+
+  it('rejects domain with single label', () => {
+    expect(isEmail('user@localhost')).toBe(false)
+  })
+
+  it('rejects domain with trailing dot', () => {
+    expect(isEmail('user@example.com.')).toBe(false)
+  })
+
+  it('rejects domain label starting with hyphen', () => {
+    expect(isEmail('user@-example.com')).toBe(false)
+  })
+
+  it('validates special chars in local part', () => {
+    expect(isEmail('user!test@example.com')).toBe(true)
+  })
+
+  it('rejects incomplete escaped quote', () => {
+    expect(isEmail('"test\\"@example.com')).toBe(false)
+  })
 })
 
 

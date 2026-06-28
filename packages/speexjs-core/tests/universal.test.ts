@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { deepEqual, pipe, compose } from '../src/core/index.js'
 import { deepGet, deepSet } from '../src/collection/index.js'
 import { formatBytes, randomString, randomBoolean, pluralize } from '../src/string/index.js'
-import { hexToRgb, rgbToHex, lighten, darken, contrastRatio, meetsWCAG } from '../src/color/index.js'
+import { hexToRgb, rgbToHex, lighten, darken, contrastRatio, meetsWCAG, hexToHsl, hslToHex, isLight, isDark, complementary, alpha, mix, randomColor } from '../src/color/index.js'
 
 describe('deepEqual', () => {
   it('primitives', () => {
@@ -151,5 +151,91 @@ describe('color utilities', () => {
   })
   it('meetsWCAG: AAA threshold', () => {
     expect(meetsWCAG('#000000', '#ffffff', 'AAA')).toBe(true)
+  })
+
+  it('hexToRgb: invalid hex returns null', () => {
+    expect(hexToRgb('invalid')).toBeNull()
+  })
+
+  it('hexToHsl and hslToHex roundtrip', () => {
+    const colors = ['#ff0000', '#00ff00', '#0000ff', '#ff8800', '#800080']
+    for (const c of colors) {
+      const hsl = hexToHsl(c)
+      expect(hsl).not.toBeNull()
+      const result = hslToHex(hsl!.h, hsl!.s, hsl!.l)
+      expect(result.toLowerCase()).toBe(c)
+    }
+  })
+
+  it('hexToHsl returns null for invalid input', () => {
+    expect(hexToHsl('not-a-color')).toBeNull()
+  })
+
+  it('isLight and isDark for white and black', () => {
+    expect(isLight('#ffffff')).toBe(true)
+    expect(isDark('#ffffff')).toBe(false)
+    expect(isLight('#000000')).toBe(false)
+    expect(isDark('#000000')).toBe(true)
+  })
+
+  it('isLight returns false for invalid input', () => {
+    expect(isLight('bad')).toBe(false)
+  })
+
+  it('complementary returns the complementary color', () => {
+    expect(complementary('#ff0000')).toBe('#00ffff')
+    expect(complementary('#00ff00')).toBe('#ff00ff')
+    expect(complementary('#0000ff')).toBe('#ffff00')
+  })
+
+  it('complementary returns original for invalid input', () => {
+    expect(complementary('bad')).toBe('bad')
+  })
+
+  it('alpha returns new hex with alpha', () => {
+    expect(alpha('#ff0000', 0.5)).toBe('#ff000080')
+    expect(alpha('#00ff00', 1)).toBe('#00ff00ff')
+    expect(alpha('#0000ff', 0)).toBe('#0000ff00')
+  })
+
+  it('alpha clamps opacity to 0-1', () => {
+    expect(alpha('#ff0000', 2)).toBe('#ff0000ff')
+    expect(alpha('#ff0000', -1)).toBe('#ff000000')
+  })
+
+  it('alpha returns original for invalid input', () => {
+    expect(alpha('bad', 0.5)).toBe('bad')
+  })
+
+  it('mix blends two colors', () => {
+    expect(mix('#ff0000', '#0000ff')).toBe('#7f007f')
+    expect(mix('#ff0000', '#0000ff', 0)).toBe('#ff0000')
+    expect(mix('#ff0000', '#0000ff', 1)).toBe('#0000ff')
+    expect(mix('#ff0000', '#0000ff', 0.25)).toBe('#bf003f')
+  })
+
+  it('mix returns color1 on invalid input', () => {
+    expect(mix('bad', '#ff0000')).toBe('bad')
+    expect(mix('#ff0000', 'bad')).toBe('#ff0000')
+  })
+
+  it('randomColor returns a valid hex color', () => {
+    for (let i = 0; i < 50; i++) {
+      const c = randomColor()
+      expect(c).toMatch(/^#[0-9a-f]{6}$/)
+    }
+  })
+
+  it('meetsWCAG: AAA threshold fails for insufficient contrast', () => {
+    expect(meetsWCAG('#666666', '#ffffff', 'AAA')).toBe(false)
+  })
+
+  it('isValidHex: valid and invalid', () => {
+    const { isValidHex } = await import('../src/color/index.js')
+    expect(isValidHex('#ff0000')).toBe(true)
+    expect(isValidHex('#f00')).toBe(true)
+    expect(isValidHex('ff0000')).toBe(true)
+    expect(isValidHex('#xyz')).toBe(false)
+    expect(isValidHex('#ff00')).toBe(false)
   })
 })

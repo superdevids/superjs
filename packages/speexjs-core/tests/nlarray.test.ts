@@ -948,3 +948,161 @@ describe('edge cases — negative indices', () => {
     expect(a.get(-1)).toBe(99)
   })
 })
+
+describe('edge cases — empty shape', () => {
+  it('NDArray with empty shape [0]', () => {
+    const a = new NDArray([], [0])
+    expect(a.shape).toEqual([0])
+    expect(a.size).toBe(0)
+    expect(a.toList()).toEqual([])
+  })
+})
+
+describe('transpose (3-D)', () => {
+  it('transposes a 3-D array', () => {
+    const a = NDArray.arange(8).reshape([2, 2, 2])
+    const t = a.transpose()
+    expect(t.shape).toEqual([2, 2, 2])
+    // [0,1,2,3,4,5,6,7] -> transposed
+    expect(t.get(0, 0, 0)).toBe(0)
+    expect(t.get(0, 0, 1)).toBe(4)
+    expect(t.get(1, 1, 0)).toBe(3)
+    expect(t.get(1, 1, 1)).toBe(7)
+  })
+})
+
+describe('squeeze (additional)', () => {
+  it('handles 1-D unchanged', () => {
+    const a = NDArray.from([1, 2, 3])
+    expect(a.squeeze().shape).toEqual([3])
+  })
+})
+
+describe('repeat', () => {
+  it('repeats each element when no axis', () => {
+    const a = NDArray.from([1, 2, 3]).repeat(2)
+    expect(a.toList()).toEqual([1, 1, 2, 2, 3, 3])
+  })
+
+  it('repeats along axis 0', () => {
+    const a = NDArray.from([[1, 2], [3, 4]]).repeat(2, 0)
+    expect(a.shape).toEqual([4, 2])
+    expect(a.toArray()).toEqual([[1, 2], [1, 2], [3, 4], [3, 4]])
+  })
+
+  it('repeats along axis 1', () => {
+    const a = NDArray.from([[1, 2], [3, 4]]).repeat(2, 1)
+    expect(a.shape).toEqual([2, 4])
+    expect(a.toArray()).toEqual([[1, 1, 2, 2], [3, 3, 4, 4]])
+  })
+
+  it('n=1 returns a copy', () => {
+    const a = NDArray.from([1, 2, 3])
+    const r = a.repeat(1)
+    expect(r.toList()).toEqual([1, 2, 3])
+    expect(r).not.toBe(a)
+  })
+
+  it('throws when n < 1', () => {
+    expect(() => NDArray.from([1]).repeat(0)).toThrow('Repeat count must be at least 1')
+  })
+})
+
+describe('where', () => {
+  it('filters by boolean NDArray', () => {
+    const a = NDArray.from([1, 2, 3, 4])
+    const cond = NDArray.from([true, false, true, false])
+    const result = a.where(cond)
+    expect(result.toList()).toEqual([1, 3])
+  })
+
+  it('filters by predicate function', () => {
+    const a = NDArray.from([1, 2, 3, 4])
+    const result = a.where(v => v > 2)
+    expect(result.toList()).toEqual([3, 4])
+  })
+
+  it('throws on size mismatch', () => {
+    const a = NDArray.from([1, 2])
+    const cond = NDArray.from([true, false, true])
+    expect(() => a.where(cond)).toThrow('same total size')
+  })
+})
+
+describe('all / any (additional)', () => {
+  it('all returns false for all falsy', () => {
+    expect(NDArray.from([0, 0, 0]).all()).toBe(false)
+  })
+
+  it('any returns false for all falsy', () => {
+    expect(NDArray.from([0, 0, 0]).any()).toBe(false)
+  })
+
+  it('any returns true for any truthy', () => {
+    expect(NDArray.from([0, 0, 1]).any()).toBe(true)
+  })
+})
+
+describe('NDArray.tan', () => {
+  it('computes element-wise tangent', () => {
+    const a = NDArray.from([0, Math.PI / 4])
+    const r = NDArray.tan(a)
+    expect(r.get(0)).toBeCloseTo(0)
+    expect(r.get(1)).toBeCloseTo(1, 1)
+  })
+})
+
+describe('NDArray.log2', () => {
+  it('computes base-2 logarithm', () => {
+    const a = NDArray.from([1, 2, 8])
+    const r = NDArray.log2(a)
+    expect(r.get(0)).toBeCloseTo(0)
+    expect(r.get(1)).toBeCloseTo(1)
+    expect(r.get(2)).toBeCloseTo(3)
+  })
+})
+
+describe('NDArray.log10', () => {
+  it('computes base-10 logarithm', () => {
+    const a = NDArray.from([1, 10, 100])
+    const r = NDArray.log10(a)
+    expect(r.get(0)).toBeCloseTo(0)
+    expect(r.get(1)).toBeCloseTo(1)
+    expect(r.get(2)).toBeCloseTo(2)
+  })
+})
+
+describe('NDArray.stack (additional)', () => {
+  it('stacks 1-D arrays into 2-D', () => {
+    const a = NDArray.ones([3])
+    const b = NDArray.zeros([3])
+    const c = NDArray.stack([a, b])
+    expect(c.shape).toEqual([2, 3])
+  })
+})
+
+describe('NDArray.vstack (additional)', () => {
+  it('stacks 1-D arrays vertically', () => {
+    const a = NDArray.from([1, 2, 3])
+    const b = NDArray.from([4, 5, 6])
+    const c = NDArray.vstack([a, b])
+    expect(c.shape).toEqual([2, 3])
+    expect(c.toArray()).toEqual([[1, 2, 3], [4, 5, 6]])
+  })
+})
+
+describe('edge cases — apply', () => {
+  it('apply transforms each element', () => {
+    const a = NDArray.from([1, 2, 3])
+    const result = a.apply(v => v * 2)
+    expect(result.toList()).toEqual([2, 4, 6])
+  })
+})
+
+describe('edge cases — map', () => {
+  it('map passes indices', () => {
+    const a = NDArray.from([[1, 2], [3, 4]])
+    const result = a.map((v, i, j) => v + i + j)
+    expect(result.toArray()).toEqual([[1, 3], [4, 6]])
+  })
+})

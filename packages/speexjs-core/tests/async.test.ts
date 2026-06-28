@@ -8,6 +8,8 @@ import {
   retryAsync,
   pipeline,
   deferred,
+  RateLimiter,
+  memoizeAsync,
 } from '../src/async/index.js'
 
 describe('sleep', () => {
@@ -178,5 +180,130 @@ describe('deferred', () => {
     const d = deferred<number>()
     d.reject(new Error('fail'))
     await expect(d.promise).rejects.toThrow('fail')
+  })
+})
+
+describe('RateLimiter', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('tryAcquire returns true when under limit', () => {
+    const limiter = new RateLimiter({ maxRequests: 2, perWindow: 1000 })
+    expect(limiter.tryAcquire()).toBe(true)
+    expect(limiter.tryAcquire()).toBe(true)
+  })
+
+  it('tryAcquire returns false when limit reached', () => {
+    const limiter = new RateLimiter({ maxRequests: 2, perWindow: 1000 })
+    limiter.tryAcquire()
+    limiter.tryAcquire()
+    expect(limiter.tryAcquire()).toBe(false)
+  })
+
+  it('tryAcquire allows again after window expires', () => {
+    const limiter = new RateLimiter({ maxRequests: 1, perWindow: 1000 })
+    expect(limiter.tryAcquire()).toBe(true)
+    expect(limiter.tryAcquire()).toBe(false)
+    vi.advanceTimersByTime(1000)
+    expect(limiter.tryAcquire()).toBe(true)
+  })
+
+  it('acquire waits when limit reached', async () => {
+    const limiter = new RateLimiter({ maxRequests: 1, perWindow: 1000 })
+    limiter.tryAcquire()
+    const promise = limiter.acquire()
+    vi.advanceTimersByTime(1000)
+    await promise
+  })
+
+  it('pending getter returns correct count', () => {
+    const limiter = new RateLimiter({ maxRequests: 3, perWindow: 5000 })
+    expect(limiter.pending).toBe(0)
+    limiter.tryAcquire()
+    expect(limiter.pending).toBe(1)
+    limiter.tryAcquire()
+    expect(limiter.pending).toBe(2)
+  })
+
+  it('pending reflects pruned entries', () => {
+    const limiter = new RateLimiter({ maxRequests: 2, perWindow: 1000 })
+    limiter.tryAcquire()
+    vi.advanceTimersByTime(1000)
+    expect(limiter.pending).toBe(0)
+  })
+
+  it('construction with invalid options throws', () => {
+    expect(() => new RateLimiter({ maxRequests: 0, perWindow: 1000 })).toThrow(RangeError)
+    expect(() => new RateLimiter({ maxRequests: 1, perWindow: 0 })).toThrow(RangeError)
+  })
+})
+
+describe('memoizeAsync', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('returns cached value within TTL', async () => {
+    const fn = vi.fn().mockResolvedValue('value')
+    const memoized = memoizeAsync(fn, { ttl: 1000 })
+    const r1 = await memoized('a')
+    const r2 = await memoized('a')
+    expect(r1).toBe('value')
+    expect(r2).toBe('value')
+    expect(fn).toHaveBeenCalledTimes(1)
+  })
+
+  it('evicts after TTL expires', async () => {
+    const fn = vi.fn().mockResolvedValue('old')
+    const memoized = memoizeAsync(fn, { ttl: 1000 })
+    await memoized('a')
+    vi.advanceTimersByTime(1001)
+    fn.mockResolvedValue('new')
+    const result = await memoized('a')
+    expect(result).toBe('new')
+    expect(fn).toHaveBeenCalledTimes(2)
+  })
+
+  it('staleWhileRevalidate returns stale and refreshes', async () => {
+    const fn = vi.fn()
+    fn.mockResolvedValue('stale')
+    const memoized = memoizeAsync(fn, { ttl: 1000, staleWhileRevalidate: true })
+    expect(await memoized('x')).toBe('stale')
+    vi.advanceTimersByTime(1001)
+    fn.mockResolvedValue('fresh')
+    const staleResult = await memoized('x')
+    expect(staleResult).toBe('stale')
+    await vi.advanceTimersByTimeAsync(0)
+    const freshResult = await memoized('x')
+    expect(freshResult).toBe('fresh')
+  })
+
+  it('clear() empties the cache', async () => {
+    const fn = vi.fn().mockResolvedValue('val')
+    const memoized = memoizeAsync(fn, { ttl: 10000 })
+    await memoized('a')
+    memoized.clear()
+    await memoized('a')
+    expect(fn).toHaveBeenCalledTimes(2)
+  })
+
+  it('maxSize evicts oldest entries', async () => {
+    const fn = vi.fn().mockImplementation(async (x: string) => x)
+    const memoized = memoizeAsync(fn as (...args: unknown[]) => Promise<unknown>, { ttl: 10000, maxSize: 2 })
+    await memoized('a')
+    await memoized('b')
+    await memoized('c')
+    expect(fn).toHaveBeenCalledTimes(3)
+    await memoized('a')
+    expect(fn).toHaveBeenCalledTimes(4)
   })
 })
