@@ -11,23 +11,35 @@ npm login
 ```bash
 cd packages/core
 
-# 1. Build & test
+# 1. Build
 npx tsup
+
+# 2. Test (757 tests)
 npx vitest run
 
-# 2. Bump version (manual di package.json)
-#    ubah "version" field
+# 3. Bump version
+npm version patch
+# or: npm version minor
+# or: npm version major
 
-# 3. Build ulang
+# 4. Build again after version bump
 npx tsup
 
-# 4. Publish
+# 5. Publish
 npm publish
+
+# 6. Commit and push
+cd ../..
+git add -A
+git commit -m "chore: bump to v$(node -p \"require('./packages/core/package.json').version\")"
+git push origin master
 ```
 
 ## Checklist Pre-Publish
 
-- [ ] `npx tsup` — sukses
-- [ ] `npx vitest run` — 428 tests pass
+- [ ] `npx tsup` — build sukses
+- [ ] `npx vitest run` — 757 tests pass
 - [ ] `npm login` — sudah login
+- [ ] Changelog sudah diupdate
+- [ ] README sudah sesuai
 - [ ] Git commit — semua perubahan ter-commit
