@@ -15,6 +15,7 @@ import {
   getControllerRoutes,
 } from './controller'
 import { HttpStatus } from './http/status'
+export * from './database/index.js'
 
 export interface ViewEngine {
   render(template: string, data: Record<string, unknown>): string | Promise<string>

@@ -133,3 +133,9 @@ export type { QueueOptions } from './queue.js'
 export { Semaphore } from './semaphore.js'
 export { memoizeAsync } from './memoize.js'
 export type { MemoizeAsyncOptions } from './memoize.js'
+
+// ─── RateLimiter, Mutex, batch, waterfall ───────────────
+export { RateLimiter } from './ratelimit.js'
+export { Mutex } from './mutex.js'
+export { batch } from './batch.js'
+export { waterfall } from './waterfall.js'

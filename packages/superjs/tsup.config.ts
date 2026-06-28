@@ -16,6 +16,7 @@ export default defineConfig({
     'rpc/index': 'src/rpc/index.ts',
     'schema/index': 'src/schema/index.ts',
     'cli/index': 'src/cli/index.ts',
+    'server/database/index': 'src/server/database/index.ts',
   },
   format: ['esm'],
   dts: true,

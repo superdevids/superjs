@@ -1,6 +1,6 @@
 {
   "name": "superjs-core",
-  "version": "0.4.4",
+  "version": "0.5.0",
   "description": "JavaScript toolkit all-in-one buat developer Indonesia: validasi NIK/NPWP/Phone, terbilang, formatRupiah, timeAgo (WIB/WITA/WIT), deepClone, logger, dep scanner. 100+ fungsi, zero dep runtime.",
   "type": "module",
   "main": "./dist/index.js",

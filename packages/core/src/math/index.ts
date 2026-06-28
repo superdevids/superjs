@@ -324,3 +324,381 @@ export function formatCurrency(
     return `${currency} ${value.toLocaleString(locale)}`
   }
 }
+
+// ─── Parity ─────────────────────────────────────────────
+
+/**
+ * Checks if a number is even.
+ *
+ * @example isEven(4) // true
+ * @example isEven(7) // false
+ *
+ * @param n - The number to check.
+ * @returns Whether the number is even.
+ */
+export function isEven(n: number): boolean {
+  return n % 2 === 0
+}
+
+/**
+ * Checks if a number is odd.
+ *
+ * @example isOdd(3) // true
+ * @example isOdd(8) // false
+ *
+ * @param n - The number to check.
+ * @returns Whether the number is odd.
+ */
+export function isOdd(n: number): boolean {
+  return n % 2 !== 0
+}
+
+// ─── Number Theory ──────────────────────────────────────
+
+/**
+ * Computes the greatest common divisor (GCD) using the Euclidean algorithm.
+ *
+ * @example gcd(12, 8) // 4
+ * @example gcd(17, 5) // 1
+ *
+ * @param a - First integer.
+ * @param b - Second integer.
+ * @returns The GCD.
+ */
+export function gcd(a: number, b: number): number {
+  if (!Number.isInteger(a) || !Number.isInteger(b)) {
+    throw new RangeError('Arguments must be integers')
+  }
+  a = Math.abs(a)
+  b = Math.abs(b)
+  while (b !== 0) {
+    const t = b
+    b = a % b
+    a = t
+  }
+  return a
+}
+
+/**
+ * Computes the least common multiple (LCM).
+ *
+ * @example lcm(4, 6) // 12
+ * @example lcm(7, 5) // 35
+ *
+ * @param a - First integer.
+ * @param b - Second integer.
+ * @returns The LCM.
+ * @throws {RangeError} If either argument is zero.
+ */
+export function lcm(a: number, b: number): number {
+  if (!Number.isInteger(a) || !Number.isInteger(b)) {
+    throw new RangeError('Arguments must be integers')
+  }
+  if (a === 0 || b === 0) {
+    throw new RangeError('Arguments must be non-zero')
+  }
+  return Math.abs(a * b) / gcd(a, b)
+}
+
+/**
+ * Computes the factorial of a non-negative integer.
+ *
+ * @example factorial(5) // 120
+ * @example factorial(0) // 1
+ *
+ * @param n - Non-negative integer.
+ * @returns The factorial.
+ * @throws {RangeError} If n is negative or not an integer.
+ */
+export function factorial(n: number): number {
+  if (!Number.isInteger(n)) {
+    throw new RangeError('Argument must be an integer')
+  }
+  if (n < 0) {
+    throw new RangeError('Factorial is not defined for negative numbers')
+  }
+  let result = 1
+  for (let i = 2; i <= n; i++) {
+    result *= i
+  }
+  return result
+}
+
+/**
+ * Tests whether a number is prime (optimized trial division).
+ *
+ * @example isPrime(7) // true
+ * @example isPrime(10) // false
+ *
+ * @param n - Positive integer.
+ * @returns Whether the number is prime.
+ * @throws {RangeError} If n is not an integer or is less than 2.
+ */
+export function isPrime(n: number): boolean {
+  if (!Number.isInteger(n)) {
+    throw new RangeError('Argument must be an integer')
+  }
+  if (n < 2) return false
+  if (n === 2 || n === 3) return true
+  if (n % 2 === 0 || n % 3 === 0) return false
+  const limit = Math.sqrt(n)
+  for (let i = 5; i <= limit; i += 6) {
+    if (n % i === 0 || n % (i + 2) === 0) return false
+  }
+  return true
+}
+
+// ─── Angle Conversion ───────────────────────────────────
+
+/**
+ * Converts degrees to radians.
+ *
+ * @example toRadians(180) // ~3.14159
+ *
+ * @param degrees - Angle in degrees.
+ * @returns Angle in radians.
+ */
+export function toRadians(degrees: number): number {
+  return (degrees * Math.PI) / 180
+}
+
+/**
+ * Converts radians to degrees.
+ *
+ * @example toDegrees(Math.PI) // 180
+ *
+ * @param radians - Angle in radians.
+ * @returns Angle in degrees.
+ */
+export function toDegrees(radians: number): number {
+  return (radians * 180) / Math.PI
+}
+
+// ─── Interpolation & Mapping ────────────────────────────
+
+/**
+ * Linearly interpolates between `a` and `b` by `t`.
+ *
+ * @example lerp(0, 100, 0.5) // 50
+ *
+ * @param a - Start value.
+ * @param b - End value.
+ * @param t - Interpolation factor (typically 0–1).
+ * @returns The interpolated value.
+ */
+export function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t
+}
+
+/**
+ * Calculates what percentage `value` is of `total`.
+ *
+ * @example percentageOf(25, 200) // 12.5
+ *
+ * @param value - The part value.
+ * @param total - The total value.
+ * @returns The percentage.
+ * @throws {RangeError} If total is zero.
+ */
+export function percentageOf(value: number, total: number): number {
+  if (total === 0) {
+    throw new RangeError('Total must be non-zero')
+  }
+  return (value / total) * 100
+}
+
+/**
+ * Maps a value from one range to another.
+ *
+ * @example mapRange(0.5, 0, 1, 0, 100) // 50
+ *
+ * @param value - The value to map.
+ * @param inMin - Lower bound of the input range.
+ * @param inMax - Upper bound of the input range.
+ * @param outMin - Lower bound of the output range.
+ * @param outMax - Upper bound of the output range.
+ * @returns The mapped value.
+ * @throws {RangeError} If the input range is zero.
+ */
+export function mapRange(value: number, inMin: number, inMax: number, outMin: number, outMax: number): number {
+  if (inMin === inMax) {
+    throw new RangeError('Input range must not be zero')
+  }
+  return ((value - inMin) / (inMax - inMin)) * (outMax - outMin) + outMin
+}
+
+// ─── Statistics ─────────────────────────────────────────
+
+/**
+ * Computes the statistical mode(s) — the most frequently occurring value(s).
+ *
+ * @example mode([1, 2, 2, 3]) // [2]
+ * @example mode([1, 1, 2, 2]) // [1, 2]
+ *
+ * @param values - Array of numbers.
+ * @returns Array of mode value(s).
+ * @throws {RangeError} If the array is empty.
+ */
+export function mode(values: number[]): number[] {
+  if (values.length === 0) {
+    throw new RangeError('Cannot compute mode of an empty array')
+  }
+  const freq = new Map<number, number>()
+  let maxFreq = 0
+  for (const v of values) {
+    const count = (freq.get(v) ?? 0) + 1
+    freq.set(v, count)
+    if (count > maxFreq) maxFreq = count
+  }
+  const result: number[] = []
+  for (const [v, count] of freq) {
+    if (count === maxFreq) result.push(v)
+  }
+  return result
+}
+
+/**
+ * Generates an array of numbers from `start` to `end` (inclusive),
+ * incremented by `step`.
+ *
+ * @example range(1, 5) // [1, 2, 3, 4, 5]
+ * @example range(0, 10, 2) // [0, 2, 4, 6, 8, 10]
+ *
+ * @param start - Start of the range.
+ * @param end - End of the range (inclusive).
+ * @param step - Increment (defaults to 1 or -1 based on direction).
+ * @returns Array of numbers.
+ * @throws {RangeError} If step is zero.
+ */
+export function range(start: number, end: number, step?: number): number[] {
+  const dir = end >= start ? 1 : -1
+  const s = step ?? dir
+  if (s === 0) {
+    throw new RangeError('Step must not be zero')
+  }
+  if ((end - start) * s < 0) {
+    return []
+  }
+  const result: number[] = []
+  let i = start
+  if (s > 0) {
+    while (i <= end) {
+      result.push(i)
+      i += s
+    }
+  } else {
+    while (i >= end) {
+      result.push(i)
+      i += s
+    }
+  }
+  return result
+}
+
+/**
+ * Computes the weighted mean of values with corresponding weights.
+ *
+ * @example weightedAverage([10, 20], [1, 4]) // 18
+ *
+ * @param values - Array of values.
+ * @param weights - Array of weights.
+ * @returns The weighted average.
+ * @throws {RangeError} If arrays are empty, differ in length, or sum of weights is zero.
+ */
+export function weightedAverage(values: number[], weights: number[]): number {
+  if (values.length === 0 || weights.length === 0) {
+    throw new RangeError('Arrays must not be empty')
+  }
+  if (values.length !== weights.length) {
+    throw new RangeError('Values and weights must have the same length')
+  }
+  let weightedSum = 0
+  let weightSum = 0
+  for (let i = 0; i < values.length; i++) {
+    weightedSum += values[i]! * weights[i]!
+    weightSum += weights[i]!
+  }
+  if (weightSum === 0) {
+    throw new RangeError('Sum of weights must be non-zero')
+  }
+  return weightedSum / weightSum
+}
+
+/**
+ * Computes the geometric mean of an array of numbers.
+ *
+ * @example geometricMean([4, 9]) // 6
+ *
+ * @param values - Array of positive numbers.
+ * @returns The geometric mean.
+ * @throws {RangeError} If the array is empty or contains negative values.
+ */
+export function geometricMean(values: number[]): number {
+  if (values.length === 0) {
+    throw new RangeError('Cannot compute geometric mean of an empty array')
+  }
+  for (const v of values) {
+    if (v < 0) {
+      throw new RangeError('Values must be non-negative for geometric mean')
+    }
+  }
+  const logSum = values.reduce((acc, v) => (v === 0 ? acc : acc + Math.log(v)), 0)
+  if (logSum === -Infinity) return 0
+  return Math.exp(logSum / values.length)
+}
+
+/**
+ * Computes the number of combinations (n choose k) — selecting k items from n without order.
+ *
+ * @example combinations(5, 2) // 10
+ *
+ * @param n - Total items.
+ * @param k - Chosen items.
+ * @returns The number of combinations.
+ * @throws {RangeError} If n < k, or either is negative / non-integer.
+ */
+export function combinations(n: number, k: number): number {
+  if (!Number.isInteger(n) || !Number.isInteger(k)) {
+    throw new RangeError('Arguments must be integers')
+  }
+  if (n < 0 || k < 0) {
+    throw new RangeError('Arguments must be non-negative')
+  }
+  if (k > n) {
+    throw new RangeError('k must not exceed n')
+  }
+  if (k === 0 || k === n) return 1
+  const r = Math.min(k, n - k)
+  let result = 1
+  for (let i = 1; i <= r; i++) {
+    result = (result * (n - r + i)) / i
+  }
+  return result
+}
+
+/**
+ * Computes the number of permutations — selecting k items from n in order.
+ *
+ * @example permutations(5, 2) // 20
+ *
+ * @param n - Total items.
+ * @param k - Chosen items.
+ * @returns The number of permutations.
+ * @throws {RangeError} If n < k, or either is negative / non-integer.
+ */
+export function permutations(n: number, k: number): number {
+  if (!Number.isInteger(n) || !Number.isInteger(k)) {
+    throw new RangeError('Arguments must be integers')
+  }
+  if (n < 0 || k < 0) {
+    throw new RangeError('Arguments must be non-negative')
+  }
+  if (k > n) {
+    throw new RangeError('k must not exceed n')
+  }
+  let result = 1
+  for (let i = n; i > n - k; i--) {
+    result *= i
+  }
+  return result
+}

@@ -1,166 +1,107 @@
 #!/usr/bin/env node
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
-import { Command } from "commander";
-import { generateComponent } from "./generate.js";
-import { scaffoldProject } from "./scaffold.js";
-import { banner, readPackageVersion } from "./utils.js";
+import { parseArgs } from '../native/args.js'
+import { colors } from '../native/colors.js'
+import { initProject } from './commands/init.js'
+import { makeController } from './commands/make-controller.js'
+import { makeMiddleware } from './commands/make-middleware.js'
+import { makeSchema } from './commands/make-schema.js'
+import { listRoutes } from './commands/list-routes.js'
+import { serve } from './commands/serve.js'
 
-const program = new Command();
-
-program
-	.name("superjs")
-	.description("SuperJS CLI — Fullstack JavaScript Framework")
-	.version(readPackageVersion(), "-v, --version", "Lihat versi");
-
-program
-	.command("init")
-	.aliases(["create", "new"])
-	.description("Buat project SuperJS baru — Create a new SuperJS project")
-	.argument("[name]", "Nama project", "my-superjs-app")
-	.option(
-		"-t, --template <template>",
-		"Template project: blank (default), fullstack, api-only",
-		"blank",
-	)
-	.option(
-		"-f, --frontend <framework>",
-		"Frontend framework: super (default), react, vue",
-		"super",
-	)
-	.option(
-		"-p, --package-manager <manager>",
-		"Package manager: npm (default), pnpm, yarn",
-		"npm",
-	)
-	.option("--no-git", "Skip git init")
-	.option("--no-install", "Skip dependency install")
-	.action(
-		async (
-			name: string,
-			options: {
-				template: string;
-				frontend: string;
-				packageManager: string;
-				git: boolean;
-				install: boolean;
-			},
-		) => {
-			console.log(banner());
-			await scaffoldProject(name, options);
-		},
-	);
-
-const generateCmd = program
-	.command("generate")
-	.aliases(["g", "make"])
-	.description(
-		"Generate komponen baru: controller, middleware, schema, module",
-	);
-
-generateCmd
-	.command("controller <name>")
-	.aliases(["ctrl", "c"])
-	.description("Generate controller baru")
-	.action((name: string) => generateComponent("controller", name));
-
-generateCmd
-	.command("middleware <name>")
-	.aliases(["mw", "m"])
-	.description("Generate middleware baru")
-	.action((name: string) => generateComponent("middleware", name));
-
-generateCmd
-	.command("schema <name>")
-	.aliases(["s"])
-	.description("Generate schema validasi baru")
-	.action((name: string) => generateComponent("schema", name));
-
-generateCmd
-	.command("module <name>")
-	.aliases(["mod"])
-	.description("Generate module lengkap dengan service")
-	.action((name: string) => generateComponent("module", name));
-
-program
-	.command("list-routes")
-	.aliases(["routes", "lr"])
-	.description("Lihat semua route yang terdaftar di project")
-	.action(listRoutes);
-
-program
-	.command("make:controller <name>")
-	.description("Generate controller baru (legacy)")
-	.action((name: string) => generateComponent("controller", name));
-
-program
-	.command("make:middleware <name>")
-	.description("Generate middleware baru (legacy)")
-	.action((name: string) => generateComponent("middleware", name));
-
-program
-	.command("make:schema <name>")
-	.description("Generate schema baru (legacy)")
-	.action((name: string) => generateComponent("schema", name));
-
-program
-	.command("make:module <name>")
-	.description("Generate module baru (legacy)")
-	.action((name: string) => generateComponent("module", name));
-
-program.parse(process.argv);
-
-function listRoutes(): void {
-	const routesDir = resolve(process.cwd(), "src/server/controllers");
-
-	if (!existsSync(routesDir)) {
-		console.log("  ℹ️  Tidak ada route terdaftar. Buat controller dulu dengan:");
-		console.log("    superjs generate controller <name>");
-		return;
-	}
-
-	const files = readdirSync(routesDir).filter((f: string) => f.endsWith(".ts"));
-
-	if (files.length === 0) {
-		console.log("  ℹ️  Tidak ada route terdaftar.");
-		return;
-	}
-
-	console.log();
-	console.log("  📋 Daftar Route:");
-	console.log();
-
-	for (const file of files) {
-		const content = readFileSync(resolve(routesDir, file), "utf-8");
-		const decorators = extractDecorators(content);
-
-		if (decorators.length > 0) {
-			console.log(`  ── ${file.replace(".controller.ts", "")} ──`);
-
-			for (const { method, route } of decorators) {
-				console.log(`    ${method.padEnd(8)} ${route}`);
-			}
-
-			console.log();
-		}
-	}
+function showHelp(): void {
+  console.log(`${colors.bold('SuperJS')} ${colors.cyan('v0.2.0')}`)
+  console.log('Fullstack JavaScript/TypeScript Framework')
+  console.log()
+  console.log(`${colors.bold('Usage:')}`)
+  console.log('  superjs init [name] [options]        Buat project baru')
+  console.log('  superjs make:controller <name>        Generate controller')
+  console.log('  superjs make:middleware <name>        Generate middleware')
+  console.log('  superjs make:schema <name>            Generate schema')
+  console.log('  superjs list-routes                   Lihat semua route')
+  console.log('  superjs serve [options]               Jalankan server')
+  console.log('  superjs --help                        Bantuan ini')
+  console.log()
+  console.log(`${colors.bold('Aliases:')}`)
+  console.log('  superjs -v, --version                 Lihat versi')
+  console.log()
+  console.log(`${colors.bold('Options:')}`)
+  console.log('  --template <type>    blank, fullstack, api-only')
+  console.log('  --frontend <fe>      super, react, vue')
+  console.log('  --port <number>      Port server (default: 3000)')
+  console.log('  --host <string>      Host address (default: localhost)')
 }
 
-function extractDecorators(
-	content: string,
-): Array<{ method: string; route: string }> {
-	const decoratorPattern =
-		/@(get|post|put|patch|del|delete)\s*\(\s*'([^']+)'\s*\)/g;
-	const results: Array<{ method: string; route: string }> = [];
+async function main(): Promise<void> {
+  const parsed = parseArgs(process.argv)
+  const command = parsed.command
 
-	let match: RegExpExecArray | null = decoratorPattern.exec(content);
-	while (match !== null) {
-		const method =
-			match[1] === "del" ? "DELETE" : (match[1] as string).toUpperCase();
-		const route = match[2] as string;
-		results.push({ method, route });
-		match = decoratorPattern.exec(content);
-	}
-
-	return results;
+  switch (command) {
+    case 'init': {
+      await initProject(parsed.args[0] || 'my-app', parsed.options)
+      break
+    }
+    case 'make:controller': {
+      if (!parsed.args[0]) {
+        console.error(colors.red('Nama controller diperlukan'))
+        console.log(`  ${colors.cyan('superjs make:controller <name>')}`)
+        process.exit(1)
+      }
+      await makeController(parsed.args[0])
+      break
+    }
+    case 'make:middleware': {
+      if (!parsed.args[0]) {
+        console.error(colors.red('Nama middleware diperlukan'))
+        console.log(`  ${colors.cyan('superjs make:middleware <name>')}`)
+        process.exit(1)
+      }
+      await makeMiddleware(parsed.args[0])
+      break
+    }
+    case 'make:schema': {
+      if (!parsed.args[0]) {
+        console.error(colors.red('Nama schema diperlukan'))
+        console.log(`  ${colors.cyan('superjs make:schema <name>')}`)
+        process.exit(1)
+      }
+      await makeSchema(parsed.args[0])
+      break
+    }
+    case 'list-routes':
+    case 'routes':
+    case 'lr': {
+      await listRoutes()
+      break
+    }
+    case 'serve':
+    case 'dev': {
+      await serve(parsed.options)
+      break
+    }
+    case 'help':
+    case '--help':
+    case '-h': {
+      showHelp()
+      break
+    }
+    case 'version':
+    case '--version':
+    case '-v': {
+      console.log('SuperJS v0.2.0')
+      break
+    }
+    default: {
+      if (command) {
+        console.error(`${colors.red(`Command '${command}' tidak dikenal`)}`)
+        console.log()
+      }
+      showHelp()
+      if (command) process.exit(1)
+    }
+  }
 }
+
+main().catch(err => {
+  console.error(colors.red(`Error: ${err.message}`))
+  process.exit(1)
+})

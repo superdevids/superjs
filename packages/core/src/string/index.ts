@@ -431,3 +431,157 @@ export function pluralize(count: number, singular: string): string {
   }
   return singular + 's'
 }
+
+/**
+ * Removes all HTML tags from a string, including script and style content.
+ *
+ * @example stripHtml('<p>Hello <b>world</b></p>') // "Hello world"
+ * @example stripHtml('<script>alert("x")</script>hi') // "hi"
+ */
+export function stripHtml(str: string): string {
+  return str.replace(/<[^>]*>/g, '')
+}
+
+/**
+ * Truncates a string by word count, appending a suffix when truncated.
+ *
+ * @example truncateWords('hello world foo bar', 2) // "hello world..."
+ * @example truncateWords('hello world foo bar', 2, '…') // "hello world…"
+ */
+export function truncateWords(str: string, count: number, suffix = '...'): string {
+  const words = str.split(/\s+/).filter(Boolean)
+  if (words.length <= count) return str
+  return words.slice(0, count).join(' ') + suffix
+}
+
+/**
+ * Checks if a string is a palindrome, ignoring case, spaces, and punctuation.
+ *
+ * @example isPalindrome('A man, a plan, a canal: Panama') // true
+ * @example isPalindrome('race a car') // false
+ */
+export function isPalindrome(str: string): boolean {
+  const cleaned = str.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()
+  if (cleaned.length <= 1) return true
+  let left = 0
+  let right = cleaned.length - 1
+  while (left < right) {
+    if (cleaned[left] !== cleaned[right]) return false
+    left++
+    right--
+  }
+  return true
+}
+
+/**
+ * Checks if two strings are anagrams, ignoring case and spaces.
+ *
+ * @example isAnagram('listen', 'silent') // true
+ * @example isAnagram('hello', 'world') // false
+ */
+export function isAnagram(str1: string, str2: string): boolean {
+  const clean = (s: string) => s.replace(/\s/g, '').toLowerCase().split('').sort().join('')
+  return clean(str1) === clean(str2)
+}
+
+/**
+ * Computes the Dice coefficient similarity between two strings (0-1).
+ *
+ * @example similarity('hello', 'hallo') // 0.666...
+ * @example similarity('abc', 'xyz') // 0
+ */
+export function similarity(a: string, b: string): number {
+  if (a === b) return 1
+  if (a.length < 2 || b.length < 2) return 0
+  const bigrams = new Map<string, number>()
+  for (let i = 0; i < a.length - 1; i++) {
+    const bg = a.slice(i, i + 2)
+    bigrams.set(bg, (bigrams.get(bg) ?? 0) + 1)
+  }
+  let intersection = 0
+  for (let i = 0; i < b.length - 1; i++) {
+    const bg = b.slice(i, i + 2)
+    const count = bigrams.get(bg) ?? 0
+    if (count > 0) {
+      bigrams.set(bg, count - 1)
+      intersection++
+    }
+  }
+  return (2 * intersection) / (a.length + b.length - 2)
+}
+
+/**
+ * Removes common leading whitespace from each line in a multi-line string.
+ *
+ * @example dedent('  hello\n  world') // "hello\nworld"
+ * @example dedent('    foo\n      bar') // "foo\n  bar"
+ */
+export function dedent(str: string): string {
+  const lines = str.split('\n')
+  if (lines.length === 0) return str
+  const indent = lines.reduce<number | null>((min, line) => {
+    if (line.trim().length === 0) return min
+    const leading = line.match(/^[ \t]*/)?.[0]?.length ?? 0
+    return min === null ? leading : Math.min(min, leading)
+  }, null)
+  if (indent === null || indent === 0) return str
+  return lines.map(line => line.slice(indent)).join('\n')
+}
+
+/**
+ * Counts the number of words in a string, handling multiple spaces and punctuation.
+ *
+ * @example wordCount('hello world') // 2
+ * @example wordCount('  hello   world! ') // 2
+ */
+export function wordCount(str: string): number {
+  const match = str.match(/[a-zA-Z0-9]+(?:['\u2019][a-zA-Z]+)?/g)
+  return match ? match.length : 0
+}
+
+/**
+ * Swaps the case of each character in a string (upper to lower, lower to upper).
+ *
+ * @example swapCase('Hello World') // "hELLO wORLD"
+ * @example swapCase('ABC123') // "abc123"
+ */
+export function swapCase(str: string): string {
+  let result = ''
+  for (let i = 0; i < str.length; i++) {
+    const ch = str[i]!
+    if (ch >= 'a' && ch <= 'z') {
+      result += ch.toUpperCase()
+    } else if (ch >= 'A' && ch <= 'Z') {
+      result += ch.toLowerCase()
+    } else {
+      result += ch
+    }
+  }
+  return result
+}
+
+/**
+ * Converts a string to COBOL / SCREAMING_SNAKE_CASE.
+ *
+ * @example toCobolCase('helloWorld') // "HELLO_WORLD"
+ * @example toCobolCase('getUserByID') // "GET_USER_BY_ID"
+ */
+export function toCobolCase(str: string): string {
+  const words = splitWords(str)
+  return words.map(w => w.toUpperCase()).join('_')
+}
+
+/**
+ * Counts character frequency in a string.
+ *
+ * @example charCount('hello') // { h: 1, e: 1, l: 2, o: 1 }
+ * @example charCount('aabb') // { a: 2, b: 2 }
+ */
+export function charCount(str: string): Record<string, number> {
+  const result: Record<string, number> = {}
+  for (let i = 0; i < str.length; i++) {
+    const ch = str[i]!
+    result[ch] = (result[ch] ?? 0) + 1
+  }
+  return result
+}

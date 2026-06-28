@@ -299,3 +299,263 @@ export function deepSet<T extends Record<string, unknown>>(obj: T, path: string,
   current[keys[keys.length - 1]!] = value
   return result as T
 }
+
+/**
+ * Splits an array into two groups: those that pass the predicate and those that don't.
+ *
+ * @example partition([1, 2, 3, 4, 5], n => n % 2 === 0)
+ *          // => [[2, 4], [1, 3, 5]]
+ */
+export function partition<T>(items: T[], predicate: (item: T) => boolean): [T[], T[]] {
+  const pass: T[] = []
+  const fail: T[] = []
+  for (const item of items) {
+    if (predicate(item)) pass.push(item)
+    else fail.push(item)
+  }
+  return [pass, fail]
+}
+
+/**
+ * Removes all falsy values from an array (false, null, 0, '', undefined, NaN).
+ *
+ * @example compact([0, 1, false, 2, '', 3, null, undefined, NaN])
+ *          // => [1, 2, 3]
+ */
+export function compact<T>(items: (T | false | null | 0 | '' | undefined)[]): T[] {
+  return items.filter(Boolean) as T[]
+}
+
+/**
+ * Returns elements in array A that are not in array B (uses SameValueZero).
+ *
+ * @example difference([1, 2, 3, 4], [2, 4])
+ *          // => [1, 3]
+ */
+export function difference<T>(a: T[], b: T[]): T[] {
+  const setB = new Set(b)
+  return a.filter(item => !setB.has(item))
+}
+
+/**
+ * Returns elements present in all given arrays (uses SameValueZero).
+ *
+ * @example intersection([1, 2, 3], [2, 3, 4])
+ *          // => [2, 3]
+ */
+export function intersection<T>(a: T[], b: T[]): T[] {
+  const setB = new Set(b)
+  return a.filter(item => setB.has(item))
+}
+
+/**
+ * Returns unique elements from all given arrays.
+ *
+ * @example union([1, 2], [2, 3], [3, 4])
+ *          // => [1, 2, 3, 4]
+ */
+export function union<T>(...arrays: T[][]): T[] {
+  const set = new Set<T>()
+  for (const arr of arrays) {
+    for (const item of arr) {
+      set.add(item)
+    }
+  }
+  return [...set]
+}
+
+/**
+ * Merges arrays element-wise into tuples, stopping at the shortest array.
+ *
+ * @example zip(['a', 'b', 'c'], [1, 2])
+ *          // => [['a', 1], ['b', 2]]
+ */
+export function zip<T, U>(a: T[], b: U[]): [T, U][]
+export function zip<T, U, V>(a: T[], b: U[], c: V[]): [T, U, V][]
+export function zip<T>(...arrays: T[][]): T[][] {
+  if (arrays.length === 0) return []
+  const minLen = Math.min(...arrays.map(a => a.length))
+  const result: T[][] = []
+  for (let i = 0; i < minLen; i++) {
+    const tuple: T[] = []
+    for (const arr of arrays) {
+      tuple.push(arr[i]!)
+    }
+    result.push(tuple)
+  }
+  return result
+}
+
+/**
+ * Inverse of zip: splits an array of tuples back into individual arrays.
+ *
+ * @example unzip([['a', 1], ['b', 2]])
+ *          // => [['a', 'b'], [1, 2]]
+ */
+export function unzip<T>(paired: T[][]): T[][] {
+  if (paired.length === 0) return []
+  const tupleLen = paired.reduce((max, t) => Math.max(max, t.length), 0)
+  const result: T[][] = Array.from({ length: tupleLen }, () => [])
+  for (const tuple of paired) {
+    for (let i = 0; i < tupleLen; i++) {
+      result[i]!.push(tuple[i] as T)
+    }
+  }
+  return result
+}
+
+/**
+ * Counts occurrences of each key produced by the key function.
+ *
+ * @example countBy([1, 2, 3, 4, 5], n => n % 2 === 0 ? 'even' : 'odd')
+ *          // => { odd: 3, even: 2 }
+ */
+export function countBy<T, K extends string | number | symbol>(items: T[], keyFn: (item: T) => K): Record<K, number> {
+  const result = {} as Record<K, number>
+  for (const item of items) {
+    const key = keyFn(item)
+    result[key] = (result[key] ?? 0) + 1
+  }
+  return result
+}
+
+/**
+ * Returns the element with the maximum value by the key function.
+ *
+ * @example maxBy([{ name: 'a', score: 10 }, { name: 'b', score: 20 }], x => x.score)
+ *          // => { name: 'b', score: 20 }
+ */
+export function maxBy<T>(items: T[], keyFn: (item: T) => number): T | undefined {
+  if (items.length === 0) return undefined
+  let maxItem = items[0]!
+  let maxVal = keyFn(maxItem)
+  for (let i = 1; i < items.length; i++) {
+    const val = keyFn(items[i]!)
+    if (val > maxVal) {
+      maxVal = val
+      maxItem = items[i]!
+    }
+  }
+  return maxItem
+}
+
+/**
+ * Returns the element with the minimum value by the key function.
+ *
+ * @example minBy([{ name: 'a', score: 10 }, { name: 'b', score: 20 }], x => x.score)
+ *          // => { name: 'a', score: 10 }
+ */
+export function minBy<T>(items: T[], keyFn: (item: T) => number): T | undefined {
+  if (items.length === 0) return undefined
+  let minItem = items[0]!
+  let minVal = keyFn(minItem)
+  for (let i = 1; i < items.length; i++) {
+    const val = keyFn(items[i]!)
+    if (val < minVal) {
+      minVal = val
+      minItem = items[i]!
+    }
+  }
+  return minItem
+}
+
+/**
+ * Returns the sum of values produced by the key function.
+ *
+ * @example sumBy([{ n: 1 }, { n: 2 }, { n: 3 }], x => x.n)
+ *          // => 6
+ */
+export function sumBy<T>(items: T[], keyFn: (item: T) => number): number {
+  let total = 0
+  for (const item of items) {
+    total += keyFn(item)
+  }
+  return total
+}
+
+/**
+ * Returns the index of the first element satisfying the predicate, or -1.
+ *
+ * @example findIndex([1, 3, 5, 8, 10], n => n % 2 === 0)
+ *          // => 3
+ */
+export function findIndex<T>(items: T[], predicate: (item: T) => boolean, fromIndex: number = 0): number {
+  for (let i = fromIndex; i < items.length; i++) {
+    if (predicate(items[i]!)) return i
+  }
+  return -1
+}
+
+/**
+ * Finds the last element satisfying the predicate.
+ *
+ * @example findLast([1, 2, 3, 4, 5], n => n % 2 === 0)
+ *          // => 4
+ */
+export function findLast<T>(items: T[], predicate: (item: T) => boolean): T | undefined {
+  for (let i = items.length - 1; i >= 0; i--) {
+    if (predicate(items[i]!)) return items[i]
+  }
+  return undefined
+}
+
+/**
+ * Drops the first n elements from the array.
+ *
+ * @example drop([1, 2, 3, 4, 5], 2)
+ *          // => [3, 4, 5]
+ */
+export function drop<T>(items: T[], n: number = 1): T[] {
+  return items.slice(Math.max(0, n))
+}
+
+/**
+ * Drops the last n elements from the array.
+ *
+ * @example dropRight([1, 2, 3, 4, 5], 2)
+ *          // => [1, 2, 3]
+ */
+export function dropRight<T>(items: T[], n: number = 1): T[] {
+  return items.slice(0, Math.max(0, items.length - n))
+}
+
+/**
+ * Takes the first n elements from the array.
+ *
+ * @example take([1, 2, 3, 4, 5], 2)
+ *          // => [1, 2]
+ */
+export function take<T>(items: T[], n: number = 1): T[] {
+  return items.slice(0, Math.max(0, n))
+}
+
+/**
+ * Takes the last n elements from the array.
+ *
+ * @example takeRight([1, 2, 3, 4, 5], 2)
+ *          // => [4, 5]
+ */
+export function takeRight<T>(items: T[], n: number = 1): T[] {
+  return items.slice(Math.max(0, items.length - n))
+}
+
+/**
+ * Removes specified values from the array (uses SameValueZero).
+ *
+ * @example without([1, 2, 1, 3, 1, 4], 1, 3)
+ *          // => [2, 4]
+ */
+export function without<T>(items: T[], ...values: T[]): T[] {
+  const exclude = new Set(values)
+  return items.filter(item => !exclude.has(item))
+}
+
+/**
+ * Gets the element at the given index. Supports negative indexing.
+ *
+ * @example nth([1, 2, 3], 1)   // => 2
+ * @example nth([1, 2, 3], -1)  // => 3
+ */
+export function nth<T>(items: T[], index: number): T | undefined {
+  return index < 0 ? items[items.length + index] : items[index]
+}
