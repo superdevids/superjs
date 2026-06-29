@@ -462,7 +462,7 @@ export async function initProject(name: string, options: Record<string, any>): P
     process.exit(1)
   }
 
-  const templateName = getTemplate(String(options.template || 'blank'))
+  const templateName = getTemplate(String(options.template || 'fullstack'))
   const template = TEMPLATES[templateName]
 
   if (!template) {
@@ -503,13 +503,13 @@ export async function initProject(name: string, options: Record<string, any>): P
   const packageManager = String(options['package-manager'] || options.packageManager || 'npm')
 
   console.log()
-  console.log(`${colors.bold('╔════════════════════════════════════╗')}`)
-  console.log(`${colors.bold('║')}  ${colors.green('SpeexJS 🚀 Project Created')}${colors.bold('       ║')}`)
-  console.log(`${colors.bold('╚════════════════════════════════════╝')}`)
-  console.log()
-  console.log(`  ${colors.bold('Name:')}     ${toPascalCase(name)}`)
-  console.log(`  ${colors.bold('Template:')} ${templateName}`)
-  console.log(`  ${colors.bold('Dir:')}      ${targetDir}`)
+  console.log(`${colors.bold('╔══════════════════════════════════════════╗')}`)
+  console.log(`${colors.bold('║')}          ${colors.green('SpeexJS')} ${colors.cyan('🚀')} ${colors.bold('Project Created')}         ${colors.bold('║')}`)
+  console.log(`${colors.bold('╠══════════════════════════════════════════╣')}`)
+  console.log(`${colors.bold('║')}  ${colors.dim('Name:')}     ${colors.white(toPascalCase(name))}`)
+  console.log(`${colors.bold('║')}  ${colors.dim('Template:')} ${colors.cyan(templateName)}`)
+  console.log(`${colors.bold('║')}  ${colors.dim('Dir:')}      ${colors.white(targetDir)}`)
+  console.log(`${colors.bold('╚══════════════════════════════════════════╝')}`)
   console.log()
   console.log(`  ${colors.cyan('$')} cd ${name}`)
   console.log(`  ${colors.cyan('$')} ${packageManager} run dev`)

@@ -1,8 +1,8 @@
 import { existsSync, readFileSync, watch } from 'node:fs'
 import { resolve } from 'node:path'
-import { pathToFileURL } from 'node:url'
 import { createServer } from 'node:http'
 import { createServer as createNetServer } from 'node:net'
+import { fork } from 'node:child_process'
 import { colors } from '../../native/colors.js'
 import { logger } from '../../native/logger.js'
 
@@ -11,35 +11,6 @@ interface ServeOptions {
   host?: string
   dev?: string | boolean
   docs?: boolean
-}
-
-/**
- * Convert filesystem path to a valid file:// URL.
- * Needed for Windows: path.resolve() returns C:\... but ESM import() requires file:///C:/...
- */
-function toFileUrl(path: string): string {
-  return pathToFileURL(path).href
-}
-
-/**
- * Try to register a TypeScript loader (tsx) so Node can import .ts files.
- * Falls back silently if none available — Node 22.6+ has native --experimental-strip-types.
- */
-async function ensureTsLoader(): Promise<void> {
-  // If `--experimental-strip-types` is already active or native TS is on, skip
-  if (process.execArgv.some(a => a.includes('strip-types') || a.includes('tsx') || a.includes('ts-node'))) {
-    return
-  }
-
-  // Try to register tsx if available locally or globally
-  for (const mod of ['tsx', 'ts-node/esm']) {
-    try {
-      await import(mod)
-      return
-    } catch {
-      continue
-    }
-  }
 }
 
 export async function serve(options: Record<string, any>): Promise<void> {
@@ -100,42 +71,22 @@ export async function serve(options: Record<string, any>): Promise<void> {
     process.exit(1)
   }
 
-  // ── Ensure TypeScript loader ─────────────────────────────────
-  if (opts.dev) {
-    try {
-      await ensureTsLoader()
-    } catch {
-      // Non-fatal: user may have native TS support in Node
-    }
-  }
+  // ── Fork child process with tsx ─────────────────────────
+  let child: any
+  let restarting = false
 
-  // ── Convert path to file:// URL (critical for Windows) ──────
-  const entryUrl = toFileUrl(entryPath)
-
-  const startServer = async () => {
-    try {
-      const mod = await import(entryUrl)
-      const app = mod.app || mod.default
-
-      if (!app || typeof app.listen !== 'function') {
-        console.error(
-          colors.red(
-            'Entry point must export { app } with .listen() method',
-          ),
-        )
-        process.exit(1)
+  const startChild = () => {
+    const childProcess = fork(entryPath, [], {
+      execArgv: ['--import', 'tsx'],
+      stdio: 'inherit',
+    })
+    childProcess.on('exit', (code) => {
+      if (code !== null && code !== 0 && !restarting) {
+        console.error(`Child process exited with code ${code}`)
+        process.exit(code)
       }
-
-      app.listen(port, host, () => {
-        console.log()
-        console.log(`  ${colors.bold('SpeexJS')} ${colors.green('running')}`)
-        console.log(`  ${colors.dim('→')}  ${colors.cyan(`http://${host}:${port}`)}`)
-        console.log()
-      })
-    } catch (err: any) {
-      console.error(colors.red(`Failed to start server: ${err.message}`))
-      process.exit(1)
-    }
+    })
+    return childProcess
   }
 
   if (opts.dev) {
@@ -151,12 +102,15 @@ export async function serve(options: Record<string, any>): Promise<void> {
       watch(srcDir, { recursive: true }, (_eventType, filename) => {
         if (filename && (filename.endsWith('.ts') || filename.endsWith('.tsx'))) {
           console.log(`\n🔄 File changed: ${filename}. Restarting...`)
-          process.exit(0)
+          restarting = true
+          child.kill()
+          child = startChild()
+          restarting = false
         }
       })
       console.log(`  ${colors.dim('📁 Watching src/ for changes...')}`)
     } catch { /* watch not available */ }
   }
 
-  await startServer()
+  child = startChild()
 }

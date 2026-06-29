@@ -394,13 +394,13 @@ describe('initProject', () => {
       expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('Unknown template'))
     })
 
-    it('defaults to blank template when no template specified', async () => {
+    it('defaults to fullstack template when no template specified', async () => {
       await initProject('my-app', {})
 
       const writeCalls = vi.mocked(writeFileSync).mock.calls
       const filePaths = writeCalls.map(([p]) => p.toString())
-      expect(filePaths.some(p => p.replace(/\\/g, '/').endsWith('src/index.ts'))).toBe(true)
-      expect(filePaths.some(p => p.replace(/\\/g, '/').endsWith('src/config/index.ts'))).toBe(true)
+      expect(filePaths.some(p => p.replace(/\\/g, '/').endsWith('src/server/index.ts'))).toBe(true)
+      expect(filePaths.some(p => p.replace(/\\/g, '/').endsWith('src/server/controllers/user.controller.ts'))).toBe(true)
     })
   })
 
