@@ -63,7 +63,7 @@ The maintainer will:
 To help us respond quickly and effectively, please include:
 
 - **Vulnerability description** — what kind of issue it is (XSS, SQLi, RCE, etc.)
-- **Affected package** — speexjs, speexkit, or vscode-dep-exray
+- **Affected package** — speexjs, speexkit, or speexray
 - **Affected versions** — specific version range where the vulnerability exists
 - **Reproduction steps** — minimal code snippet or configuration to trigger the issue
 - **Proof of concept** (optional) — demonstrates the impact

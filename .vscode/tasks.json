@@ -4,9 +4,9 @@
     {
       "type": "npm",
       "script": "compile",
-      "path": "extensions/vscode-dep-exray",
+      "path": "extensions/speexray",
       "problemMatcher": "$tsc-watch",
-      "label": "npm: compile (vscode-dep-exray)",
+      "label": "npm: compile (speexray)",
       "detail": "compile extension"
     }
   ]

@@ -1,5 +1,5 @@
 {
-  "name": "vscode-dep-exray",
+  "name": "speexray",
   "displayName": "dep-exray",
   "description": "Dependency health scanner — detect bloat, security issues, and suggest replacements",
   "version": "0.1.0",

@@ -24,7 +24,7 @@ speexjs/                          ← pnpm workspace root
 │   └── speexkit/                 → Zero-dep utility toolkit
 │       └── ARCHITECTURE.md       → Detailed architecture
 ├── extensions/                   → Editor extensions
-│   └── vscode-dep-exray/         → VS Code dependency scanner
+│   └── speexray/         → VS Code dependency scanner
 ├── .github/                      → CI/CD, issue templates
 ├── *.md                          → Root documentation
 └── pnpm-workspace.yaml           → Workspace definition
@@ -85,7 +85,7 @@ Packages evolve independently:
 |---------|---------|--------|-------|----|
 | speexjs | 1.6.1 | ✅ Production | 1,990 | ✅ |
 | speexkit | 1.4.12 | ✅ Production | 1,477 | ✅ |
-| vscode-dep-exray | 0.1.0 | ⚠️ Alpha | — | — |
+| speexray | 0.1.0 | ⚠️ Alpha | — | — |
 
 ---
 
