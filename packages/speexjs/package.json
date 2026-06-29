@@ -1,6 +1,6 @@
 {
 	"name": "speexjs",
-	"version": "1.4.3",
+	"version": "1.4.4",
 	"description": "Fullstack JavaScript/TypeScript framework — Server, Client, RPC, Schema, CLI, Database, Auth, Cache, Storage. Zero dependencies.",
 	"type": "module",
 	"main": "./dist/index.js",
@@ -126,8 +126,7 @@
 		"indonesia"
 	],
 	"publishConfig": {
-		"access": "public",
-		"provenance": true
+		"access": "public"
 	},
 	"repository": {
 		"type": "git",

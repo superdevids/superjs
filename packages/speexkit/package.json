@@ -1,6 +1,6 @@
 {
   "name": "speexkit",
-  "version": "0.8.7",
+  "version": "1.4.4",
   "description": "JavaScript toolkit: NDArray, ML, Stats, validation, functional, date, async, collection, color, error, logger, crypto, path, IO, type, dep-exray. Zero dependencies.",
   "type": "module",
   "main": "./dist/index.js",
@@ -177,8 +177,7 @@
     "lodash-alternative"
   ],
   "publishConfig": {
-    "access": "public",
-    "provenance": true
+    "access": "public"
   },
   "repository": {
     "type": "git",
