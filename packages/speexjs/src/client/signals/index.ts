@@ -8,9 +8,11 @@ interface Subscribable {
 }
 
 function flushPending(): void {
-  const fns = [...pendingUpdates]
-  pendingUpdates.clear()
-  for (const fn of fns) fn()
+  while (pendingUpdates.size > 0) {
+    const updates = [...pendingUpdates]
+    pendingUpdates.clear()
+    for (const fn of updates) fn()
+  }
 }
 
 function trackSource(node: Subscribable): void {
@@ -94,7 +96,11 @@ export class Computed<T> {
   private _onDepChange = (): void => {
     if (!this._dirty) {
       this._dirty = true
-      for (const s of [...this._subs]) s()
+      const oldValue = this._value
+      this._eval()
+      if (this._value !== oldValue) {
+        for (const s of [...this._subs]) s()
+      }
     }
   }
 

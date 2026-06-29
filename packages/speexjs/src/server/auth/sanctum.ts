@@ -3,9 +3,14 @@ import { createHmac, randomBytes } from 'node:crypto'
 export class Sanctum {
   private tokens = new Map<string, { userId: string; abilities: string[] }>()
   private csrfTokens = new Map<string, string>()
+  private hmacKey: string
+
+  constructor(hmacKey?: string) {
+    this.hmacKey = hmacKey ?? process.env.APP_KEY ?? 'sanctum'
+  }
 
   private hash(token: string): string {
-    const hmac = createHmac('sha256', 'sanctum')
+    const hmac = createHmac('sha256', this.hmacKey)
     hmac.update(token)
     return hmac.digest('hex')
   }

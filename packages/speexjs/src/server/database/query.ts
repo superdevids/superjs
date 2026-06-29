@@ -243,7 +243,7 @@ export class QueryBuilder {
 	async count(column = "*"): Promise<number> {
 		const qb = this.clone();
 		qb.columns = [`COUNT(${column === "*" ? "*" : this.wrap(column)}) as aggregate`];
-		qb.orderBys = []; qb.limitValue = null; qb.offsetValue = null;
+		qb.orderBys = []; qb.limitValue = null; qb.offsetValue = null; qb.distinctEnabled = false;
 		const { sql, bindings } = qb.toSQL();
 		const result = await this.connection.raw(sql, bindings);
 		const row = result.rows[0];
@@ -283,18 +283,19 @@ export class QueryBuilder {
 		const dialect = this.connection.getDialect();
 		if (driverType === "postgresql") {
 			const result = await this.connection.raw(dialect.compileInsertReturning(sql, bindings), bindings);
-			return result.rows.length > 0 ? Number(result.rows[0].id) ?? 0 : 0;
+			return result.rows.length > 0 ? Number(result.rows[0]?.id ?? 0) : 0;
 		}
 		const result = await this.connection.raw(sql, bindings);
 		if (driverType === "mysql") {
 			const h = result.rows;
-			if (h && typeof h === 'object' && 'insertId' in h) return Number(h.insertId) ?? 0;
-			if (Array.isArray(result.rows) && result.rows.length > 0) return Number(result.rows[0]?.insertId ?? result.rows[0]?.id ?? 0);
+			const isOkPacket = (obj: any): obj is { insertId: number } => obj != null && typeof obj === 'object' && 'insertId' in obj;
+			if (isOkPacket(h)) return Number(h.insertId) ?? 0;
+			if (Array.isArray(h) && h.length > 0) return Number(h[0]?.insertId ?? h[0]?.id ?? 0);
 			return 0;
 		}
 		if (driverType === "sqlite") {
 			const r = await this.connection.raw("SELECT last_insert_rowid() as id");
-			return r.rows.length > 0 ? Number(r.rows[0].id) ?? 0 : 0;
+			return r.rows.length > 0 ? Number(r.rows[0]?.id ?? 0) : 0;
 		}
 		return 0;
 	}
@@ -308,13 +309,13 @@ export class QueryBuilder {
 		const updateCols = Object.keys(data).filter(k => !conflictColumns.includes(k))
 		if (updateCols.length === 0) return this.insert(data)
 
-		const updates = updateCols.map(c => `${dialect.wrapIdentifier(c)} = VALUES(${dialect.wrapIdentifier(c)})`).join(', ')
-
 		let upsertSql: string
 		if (this.connection.getDriver() === 'postgresql') {
-			upsertSql = `${sql} ON CONFLICT (${conflictCols}) DO UPDATE SET ${updates}`
+			const pgUpdates = updateCols.map(c => `${dialect.wrapIdentifier(c)} = EXCLUDED.${dialect.wrapIdentifier(c)}`).join(', ')
+			upsertSql = `${sql} ON CONFLICT (${conflictCols}) DO UPDATE SET ${pgUpdates}`
 		} else {
-			upsertSql = `${sql} ON DUPLICATE KEY UPDATE ${updates}`
+			const mysqlUpdates = updateCols.map(c => `${dialect.wrapIdentifier(c)} = VALUES(${dialect.wrapIdentifier(c)})`).join(', ')
+			upsertSql = `${sql} ON DUPLICATE KEY UPDATE ${mysqlUpdates}`
 		}
 
 		const result = await this.connection.raw(upsertSql, bindings)
@@ -330,15 +331,29 @@ export class QueryBuilder {
 	async update(data: Record<string, any>): Promise<number> {
 		const { sql, bindings } = this.compileUpdate(data);
 		const result = await this.connection.raw(sql, bindings);
-		const row = result.rows[0];
-		return row ? (row.affectedRows ?? row.changes ?? result.rows.length) : 0;
+		if (result.rows && typeof result.rows === 'object' && 'affectedRows' in result.rows) {
+			return (result.rows as any).affectedRows ?? 0;
+		}
+		const rows = result.rows as any[];
+		if (rows.length > 0) {
+			const info = rows[0];
+			return info.affectedRows ?? info.changes ?? rows.length;
+		}
+		return 0;
 	}
 
 	async delete(): Promise<number> {
 		const { sql, bindings } = this.compileDelete();
 		const result = await this.connection.raw(sql, bindings);
-		const row = result.rows[0];
-		return row ? (row.affectedRows ?? row.changes ?? result.rows.length) : 0;
+		if (result.rows && typeof result.rows === 'object' && 'affectedRows' in result.rows) {
+			return (result.rows as any).affectedRows ?? 0;
+		}
+		const rows = result.rows as any[];
+		if (rows.length > 0) {
+			const info = rows[0];
+			return info.affectedRows ?? info.changes ?? rows.length;
+		}
+		return 0;
 	}
 
 	async truncate(): Promise<void> {

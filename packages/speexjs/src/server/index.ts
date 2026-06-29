@@ -337,10 +337,12 @@ export class SuperApp {
 			});
 		} catch (err: unknown) {
 			if (this.onErrorHandler !== null) {
-				await this.onErrorHandler(
-					err instanceof Error ? err : new Error(String(err)),
-					ctx,
-				);
+				try {
+					await this.onErrorHandler(
+						err instanceof Error ? err : new Error(String(err)),
+						ctx,
+					);
+				} catch { /* ignore handler errors */ }
 			} else {
 				throw err;
 			}

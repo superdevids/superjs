@@ -28,7 +28,7 @@ export class Mailer {
   }
 
   async sendLater(message: MailMessage): Promise<void> {
-    setImmediate(() => { this.send(message).catch(() => {}) })
+    setImmediate(() => { this.send(message).catch(err => console.error('[Mail] sendLater failed:', err)) })
   }
 }
 
@@ -86,7 +86,8 @@ export class SmtpMailTransport implements MailTransport {
         buffer = lines.pop() ?? ''
         const last = lines[lines.length - 1] ?? ''
         
-        if (!last.startsWith('2') && !last.startsWith('3')) return
+		if (last.length >= 4 && last[3] === '-') return
+		if (!last.startsWith('2') && !last.startsWith('3')) return
         
         step++
         if (step === 1) { send(`EHLO speexjs`); return }
@@ -112,14 +113,17 @@ export class SmtpMailTransport implements MailTransport {
 
 export class NodemailerTransport implements MailTransport {
   private transporter: any = null
+  private initPromise: Promise<void>
+
   constructor(config: { host: string; port: number; secure?: boolean; auth?: { user: string; pass: string } }) {
-    // @ts-expect-error - optional dependency
-    import('nodemailer').then((mod: any) => {
+    // @ts-expect-error - nodemailer is optional
+    this.initPromise = import('nodemailer').then((mod: any) => {
       this.transporter = mod.default.createTransport(config)
     }).catch(() => { throw new Error('nodemailer not installed. Run: npm install nodemailer') })
   }
+
   async send(message: MailMessage): Promise<void> {
-    if (!this.transporter) throw new Error('Nodemailer not loaded')
+    await this.initPromise
     await this.transporter.sendMail({ from: message.from, to: message.to, subject: message.subject, html: message.html, text: message.text })
   }
 }

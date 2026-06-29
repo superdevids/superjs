@@ -21,8 +21,16 @@ export class Model {
   static table: string = ''
   static connection: QueryRunner | null = null
   protected static queryRunner: QueryRunner | null = null
-  private static relationDefs: Map<string, RelationDefinition> = new Map()
-  private static eagerLoads: Map<string, boolean> = new Map()
+  private static classStores = new WeakMap<typeof Model, { relationDefs: Map<string, RelationDefinition>; eagerLoads: Map<string, boolean> }>()
+
+  private static getStore(): { relationDefs: Map<string, RelationDefinition>; eagerLoads: Map<string, boolean> } {
+    let store = this.classStores.get(this)
+    if (!store) {
+      store = { relationDefs: new Map(), eagerLoads: new Map() }
+      this.classStores.set(this, store)
+    }
+    return store
+  }
   /** @internal cache for loaded relations on instances */
   _relations: Record<string, unknown> = {}
 
@@ -46,7 +54,7 @@ export class Model {
     localKey?: string,
   ): void {
     const key = `hasOne:${relatedModel.table}`
-    this.relationDefs.set(key, {
+    this.getStore().relationDefs.set(key, {
       type: 'hasOne',
       relatedModel,
       foreignKey: foreignKey ?? `${this.table}_id`,
@@ -60,7 +68,7 @@ export class Model {
     localKey?: string,
   ): void {
     const key = `hasMany:${relatedModel.table}`
-    this.relationDefs.set(key, {
+    this.getStore().relationDefs.set(key, {
       type: 'hasMany',
       relatedModel,
       foreignKey: foreignKey ?? `${this.table}_id`,
@@ -74,7 +82,7 @@ export class Model {
     ownerKey?: string,
   ): void {
     const key = `belongsTo:${relatedModel.table}`
-    this.relationDefs.set(key, {
+    this.getStore().relationDefs.set(key, {
       type: 'belongsTo',
       relatedModel,
       foreignKey: foreignKey ?? `${relatedModel.table}_id`,
@@ -90,7 +98,7 @@ export class Model {
   ): void {
     const tables = [this.table, relatedModel.table].sort()
     const key = `belongsToMany:${relatedModel.table}`
-    this.relationDefs.set(key, {
+    this.getStore().relationDefs.set(key, {
       type: 'belongsToMany',
       relatedModel,
       foreignKey: foreignPivotKey ?? `${this.table}_id`,
@@ -104,7 +112,7 @@ export class Model {
     morphName: string,
   ): void {
     const key = `morphMany:${morphName}`
-    this.relationDefs.set(key, {
+    this.getStore().relationDefs.set(key, {
       type: 'morphMany',
       relatedModel,
       foreignKey: `${morphName}_id`,
@@ -119,7 +127,7 @@ export class Model {
     foreignKey?: string,
   ): void {
     const key = `morphOne:${morphName}`
-    this.relationDefs.set(key, {
+    this.getStore().relationDefs.set(key, {
       type: 'morphOne',
       relatedModel,
       foreignKey: foreignKey ?? `${morphName}_id`,
@@ -130,7 +138,7 @@ export class Model {
 
   static morphToMany(relatedModel: typeof Model, morphName: string, table?: string): void {
     const key = `morphToMany:${morphName}:${relatedModel.table}`
-    this.relationDefs.set(key, {
+    this.getStore().relationDefs.set(key, {
       type: 'morphToMany',
       relatedModel,
       foreignKey: `${morphName}_id`,
@@ -144,7 +152,7 @@ export class Model {
 
   static with(...relations: string[]): void {
     for (const rel of relations) {
-      this.eagerLoads.set(rel, true)
+      this.getStore().eagerLoads.set(rel, true)
     }
   }
 
@@ -181,17 +189,16 @@ export class Model {
     for (const [key, value] of Object.entries(attributes)) {
       qb.where(key, value)
     }
-    const existing = await qb.first()
-    if (existing) {
-      const mergeValues = values ?? attributes
-      const id = (existing as any).id
-      const updateQb = new QueryBuilder(this.queryRunner!, this.table)
-      for (const [key, value] of Object.entries(attributes)) {
-        updateQb.where(key, value)
-      }
-      await updateQb.update(mergeValues)
-      return this.find(id) as any
-    }
+	const existing = await qb.first()
+	if (existing) {
+		const mergeValues = values ?? attributes
+		const updateQb = new QueryBuilder(this.queryRunner!, this.table)
+		for (const [key, value] of Object.entries(attributes)) {
+			updateQb.where(key, value)
+		}
+		await updateQb.update(mergeValues)
+		return this.hydrate({ ...existing, ...mergeValues })
+	}
     return this.create({ ...attributes, ...values }) as any
   }
 
@@ -216,7 +223,7 @@ export class Model {
     }
   }
 
-  async load(..._relations: string[]): Promise<void> {
+  async load(...relations: string[]): Promise<void> {
     const ModelClass = this.constructor as typeof Model
     const id = this.id
     if (id === undefined) return
@@ -224,6 +231,12 @@ export class Model {
     if (fresh) {
       for (const key of Object.keys(fresh)) {
         if (!key.startsWith('_')) (this as any)[key] = (fresh as any)[key]
+      }
+    }
+    // Load only relations not already loaded
+    for (const rel of relations) {
+      if (!this._relations[rel] && fresh) {
+        this._relations[rel] = (fresh as any)._relations?.[rel]
       }
     }
   }
@@ -238,8 +251,8 @@ export class Model {
   private static async loadRelations(instances: any[]): Promise<void> {
     if (instances.length === 0) return
 
-    for (const [key, def] of this.relationDefs) {
-      const shouldLoad = this.eagerLoads.size === 0 || this.eagerLoads.has(key.split(':')[1] ?? key)
+    for (const [key, def] of this.getStore().relationDefs) {
+      const shouldLoad = this.getStore().eagerLoads.size === 0 || this.getStore().eagerLoads.has(key.split(':')[1] ?? key)
       if (!shouldLoad) continue
 
       const localIds = instances.map((i: any) => i[def.localKey]).filter(Boolean)

@@ -294,20 +294,16 @@ export function cacheResponse(ttl?: number): Middleware {
 
 		await next();
 
-		const resp = ctx.response as unknown as {
-			_body: string | Buffer | null;
-			_statusCode: number;
-		};
-		const body = resp._body;
+		const body = ctx.response.body;
 
-		if (body !== null && resp._statusCode >= 200 && resp._statusCode < 300) {
+		if (body !== null && ctx.response.statusCode >= 200 && ctx.response.statusCode < 300) {
 			const contentType =
 				ctx.response.getHeader("content-type") ?? "text/plain";
 			await cache.set(
 				key,
 				{
 					body: typeof body === "string" ? body : body.toString(),
-					status: resp._statusCode,
+					status: ctx.response.statusCode,
 					contentType,
 				},
 				ttl,

@@ -70,6 +70,9 @@ export function registerMacro(
 	name: string,
 	fn: (this: SuperResponse, ...args: any[]) => SuperResponse,
 ): void {
+	if (macroFns[name]) {
+		console.warn(`Warning: Macro "${name}" is already registered. Overwriting.`);
+	}
 	macroFns[name] = fn;
 }
 

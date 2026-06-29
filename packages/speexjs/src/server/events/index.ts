@@ -193,7 +193,9 @@ export class Event {
 let defaultEvent: Event | null = null;
 
 export function createEvent(config?: EventConfig): Event {
-	defaultEvent = new Event(config);
+	if (defaultEvent === null) {
+		defaultEvent = new Event(config);
+	}
 	return defaultEvent;
 }
 

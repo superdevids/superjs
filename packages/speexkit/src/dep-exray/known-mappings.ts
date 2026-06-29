@@ -14,7 +14,7 @@ export const KNOWN_MAPPINGS: PackageMapping[] = [
   {
     name: 'lodash',
     size: '4.2 MB',
-    replacement: 'jscore-core',
+    replacement: 'speexkit',
     confidence: 'high',
     autoPrReady: true,
     reason: 'Most lodash functions have direct replacements in jscore-core with 99% API compatibility',
@@ -59,7 +59,7 @@ export const KNOWN_MAPPINGS: PackageMapping[] = [
   {
     name: 'deepmerge',
     size: '15 KB',
-    replacement: 'jscore-core',
+    replacement: 'speexkit',
     confidence: 'high',
     autoPrReady: true,
     reason: 'jscore-core provides deepMerge out of the box',
@@ -68,7 +68,7 @@ export const KNOWN_MAPPINGS: PackageMapping[] = [
   {
     name: 'lodash.merge',
     size: '25 KB',
-    replacement: 'jscore-core',
+    replacement: 'speexkit',
     confidence: 'high',
     autoPrReady: true,
     reason: 'jscore-core provides deepMerge out of the box',

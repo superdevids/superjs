@@ -269,21 +269,23 @@ function patchProps(el: Element, oldProps: Record<string, any>, newProps: Record
   }
 }
 
-function getVNodeKey(vn: VNode | undefined): string | number {
-  return (vn != null && 'key' in vn && (vn as any).key != null) ? (vn as any).key : -1
+function getVNodeKey(vn: VNode | undefined, index: number): string | number {
+  return (vn != null && 'key' in vn && (vn as any).key != null) ? (vn as any).key : index
 }
 
 function patchChildren(parent: Node, oldChildren: VNode[], newChildren: VNode[]): void {
   const oldMap = new Map<string | number, { node: Node; vnode: VNode }>()
   for (let i = 0; i < oldChildren.length; i++) {
-    const key = getVNodeKey(oldChildren[i])
-    oldMap.set(key, { node: parent.childNodes[i]!, vnode: oldChildren[i]! })
+    const key = getVNodeKey(oldChildren[i], i)
+    if (i < parent.childNodes.length) {
+      oldMap.set(key, { node: parent.childNodes[i]!, vnode: oldChildren[i]! })
+    }
   }
 
   const maxLen = Math.max(oldChildren.length, newChildren.length)
   for (let i = 0; i < maxLen; i++) {
     const newChild = newChildren[i]
-    const newKey = getVNodeKey(newChild)
+    const newKey = getVNodeKey(newChild, i)
     const matched = oldMap.get(newKey)
 
     if (matched && newChild && isSameVNodeType(matched.vnode, newChild)) {

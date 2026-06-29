@@ -23,7 +23,7 @@ export class Queue {
     if (!handler) throw new Error(`No handler registered for job: ${name}`)
     if (this.jobs.length >= this.maxSize) throw new Error(`Queue full (max ${this.maxSize})`)
     this.jobs.push({ name, payload, handler })
-    this.process()
+    this.process().catch(() => {})
   }
 
   private async process(): Promise<void> {

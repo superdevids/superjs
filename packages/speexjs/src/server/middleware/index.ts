@@ -145,6 +145,11 @@ export function session(options?: SessionOptions): Middleware {
 		}
 		const sessionData = sessions.get(id)!.data;
 
+		// Renew TTL on activity
+		if (sessions.has(id)) {
+			sessions.get(id)!.createdAt = Date.now();
+		}
+
 		(ctx as unknown as Record<string, unknown>).session = sessionData;
 
 		if (request.cookie(opts.name) === undefined) {
@@ -190,6 +195,7 @@ export function throttle(limit?: number, window?: number): Middleware {
 	const maxRequests = limit ?? 60;
 	const timeWindow = (window ?? 60) * 1000;
 	const hits = new Map<string, { count: number; resetAt: number }>();
+	const normalizeIp = (ip: string): string => ip.startsWith('::ffff:') ? ip.slice(7) : ip;
 
 	const cleanup = setInterval(() => {
 		const now = Date.now();
@@ -205,7 +211,7 @@ export function throttle(limit?: number, window?: number): Middleware {
 	}
 
 	return (ctx: RouteContext, next: () => Promise<void>) => {
-		const key = ctx.request.ip;
+		const key = normalizeIp(ctx.request.ip);
 
 		const now = Date.now();
 		const hit = hits.get(key);
@@ -239,22 +245,10 @@ export function throttle(limit?: number, window?: number): Middleware {
 }
 
 export function logger(): Middleware {
-	return (ctx: RouteContext, next: () => Promise<void>) => {
+	return async (ctx: RouteContext, next: () => Promise<void>) => {
 		const start = Date.now();
 		const { method, path, ip } = ctx.request;
-
-		const result = next();
-
-		if (result instanceof Promise) {
-			return result.then(() => {
-				const duration = Date.now() - start;
-				const status = ctx.response.statusCode;
-				console.log(
-					`[${new Date().toISOString()}] ${method} ${path} ${status} ${duration}ms - ${ip}`,
-				);
-			});
-		}
-
+		await next();
 		const duration = Date.now() - start;
 		const status = ctx.response.statusCode;
 		console.log(
@@ -365,9 +359,9 @@ export function staticFiles(root: string, options?: StaticOptions): Middleware {
 			.header("cache-control", `public, max-age=${opts.maxAge}`)
 			.header("last-modified", stats.mtime.toUTCString());
 
+		response.rawResponse.statusCode = HttpStatus.OK;
 		const readStream = createReadStream(fullPath);
 		readStream.pipe(response.rawResponse);
-		response.rawResponse.statusCode = HttpStatus.OK;
 
 		return new Promise<void>((resolve, reject) => {
 			readStream.on("end", () => resolve());
@@ -438,15 +432,15 @@ export function csrf(): Middleware {
 }
 
 export function compress(): Middleware {
-	return (ctx: RouteContext, next: () => Promise<void>) => {
+	return async (ctx: RouteContext, next: () => Promise<void>) => {
 		const { request } = ctx;
 		const acceptEncoding = request.headers.get("accept-encoding") ?? "";
 
 		if (acceptEncoding.includes("gzip")) {
-			return compressWith(ctx, next, "gzip");
+			await compressWith(ctx, next, "gzip");
+		} else {
+			await next();
 		}
-
-		return next();
 	};
 }
 
@@ -455,6 +449,7 @@ function compressWith(
 	next: () => Promise<void>,
 	_encoding: string,
 ): Promise<void> {
+	const originalSend = ctx.response.send.bind(ctx.response);
 	(ctx.response as any).send = function(body: string | Buffer, status?: number, contentType?: string) {
 		if (status !== undefined) this._statusCode = status;
 		this._body = body;
@@ -470,7 +465,9 @@ function compressWith(
 		return this;
 	};
 
-	return next();
+	return next().finally(() => {
+		(ctx.response as any).send = originalSend;
+	});
 }
 
 export function helmet(): Middleware {
@@ -509,7 +506,7 @@ export function validate(schema: Schema<unknown>): Middleware {
       return
     }
     (ctx as any).validated = result.data
-    return next()
+    return await next()
   }
 }
 
@@ -524,7 +521,7 @@ export function validateQuery(schema: Schema<unknown>): Middleware {
       return
     }
     (ctx as any).validatedQuery = result.data
-    return next()
+    return await next()
   }
 }
 

@@ -31,7 +31,8 @@ export abstract class Schema<T> {
     try {
       return { success: true, data: this._parse(value) }
     } catch (e) {
-      return { success: false, error: e instanceof SchemaError ? e.message : String(e) }
+      if (e instanceof SchemaError) return { success: false, error: e.message }
+      return { success: false, error: 'Validation failed' }
     }
   }
 

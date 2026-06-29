@@ -1,7 +1,20 @@
 import { randomUUID } from 'node:crypto'
 import { writeFile, readFile, unlink, mkdir } from 'node:fs/promises'
+import { unlinkSync } from 'node:fs'
 import { join, extname, basename, dirname } from 'node:path'
 import { tmpdir } from 'node:os'
+
+const tempFiles: string[] = []
+let cleanupRegistered = false
+function registerCleanup(): void {
+  if (cleanupRegistered) return
+  cleanupRegistered = true
+  process.on('exit', () => {
+    for (const f of tempFiles) {
+      try { unlinkSync(f) } catch { /* ignore */ }
+    }
+  })
+}
 
 export interface UploadedFile {
   readonly fieldName: string
@@ -111,6 +124,8 @@ export class SuperUploadedFile implements UploadedFile {
     const filePath = join(tmp, fileName)
 
     await writeFile(filePath, buffer)
+    tempFiles.push(filePath)
+    registerCleanup()
 
     return new SuperUploadedFile({
       fieldName,
@@ -125,6 +140,8 @@ export class SuperUploadedFile implements UploadedFile {
   async cleanup(): Promise<void> {
     try {
       await unlink(this.path)
+      const idx = tempFiles.indexOf(this.path)
+      if (idx !== -1) tempFiles.splice(idx, 1)
     } catch {
       // File may have been moved or already deleted
     }

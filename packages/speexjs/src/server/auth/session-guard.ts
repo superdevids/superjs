@@ -94,6 +94,10 @@ export class SessionGuard {
       }
     }
 
+    if (this.config.provider === undefined) {
+      console.warn('[SessionGuard] login() called without a provider configured. Session will not be persisted against a user database.')
+    }
+
     const payload: SessionPayload = {
       userId,
       data: {},

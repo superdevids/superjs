@@ -120,8 +120,8 @@ export class SuperResponse {
       this._headers.set('content-type', 'text/event-stream')
       this._headers.set('cache-control', 'no-cache')
       this._headers.set('connection', 'keep-alive')
-      this.flushHeaders()
       this.raw.statusCode = this._statusCode
+      this.flushHeaders()
     }
     this.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
     return this
@@ -169,12 +169,14 @@ export class SuperResponse {
 
 	stream(stream: Readable, status?: number): this {
 		if (status !== undefined) this._statusCode = status;
-		this.flushHeaders();
 		this.raw.statusCode = this._statusCode;
+		this.flushHeaders();
 		stream.pipe(this.raw);
 		stream.on("end", () => {
 			this._sent = true;
 		});
+		// Note: status code is already sent (headers were flushed before piping),
+		// so setting raw.statusCode here has no effect on the response.
 		stream.on("error", (_err: Error) => {
 			if (!this._sent) {
 				this._sent = true;
@@ -229,13 +231,15 @@ export class SuperResponse {
 				}
 			}
 
-			this.flushHeaders();
 			this.raw.statusCode = this._statusCode;
+			this.flushHeaders();
 			const readStream = createReadStream(fullPath);
 			readStream.pipe(this.raw);
 			readStream.on("end", () => {
 				this._sent = true;
 			});
+			// Note: status code is already sent (headers were flushed before piping),
+			// so setting raw.statusCode here has no effect on the response.
 			readStream.on("error", () => {
 				if (!this._sent) {
 					this._sent = true;
@@ -285,6 +289,10 @@ export class SuperResponse {
 		return this;
 	}
 
+	get body(): string | Buffer | null {
+		return this._body;
+	}
+
 	get statusCode(): number {
 		return this._statusCode;
 	}
@@ -301,9 +309,9 @@ export class SuperResponse {
 		if (this._sent) return;
 		this._sent = true;
 
-		this.flushHeaders();
-
 		this.raw.statusCode = this._statusCode;
+
+		this.flushHeaders();
 
 		if (this._body !== null) {
 			this.raw.end(this._body);

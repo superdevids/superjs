@@ -155,7 +155,7 @@ export class SuperRequest {
       raw,
       text,
       json,
-      parsed: json ?? text,
+	parsed: json ?? (this.isContentType('application/json') ? undefined : text),
       formData,
       files,
       multipartParsed,
@@ -333,10 +333,10 @@ function parseUrlEncoded(text: string): Record<string, string> {
     if (!pair) continue
     const eqIndex = pair.indexOf('=')
     if (eqIndex === -1) {
-      result[decodeURIComponent(pair)] = ''
+      result[decodeURIComponent(pair.replace(/\+/g, ' '))] = ''
     } else {
-      const key = decodeURIComponent(pair.slice(0, eqIndex))
-      const value = decodeURIComponent(pair.slice(eqIndex + 1))
+      const key = decodeURIComponent(pair.slice(0, eqIndex).replace(/\+/g, ' '))
+      const value = decodeURIComponent(pair.slice(eqIndex + 1).replace(/\+/g, ' '))
       result[key] = value
     }
   }
@@ -434,8 +434,8 @@ function parseDisposition(headerSection: string): DispositionInfo | undefined {
   if (match === null) return undefined
 
   const params = match[1] as string
-  const nameMatch = params.match(/name="([^"]*)"/i)
-  const filenameMatch = params.match(/filename="([^"]*)"/i)
+  const nameMatch = params.match(/name="([^"]*)"/i) || params.match(/name=([^;\s]+)/i)
+  const filenameMatch = params.match(/filename="([^"]*)"/i) || params.match(/filename=([^;\s]+)/i)
 
   if (nameMatch === null) return undefined
 

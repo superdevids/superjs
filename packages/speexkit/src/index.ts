@@ -437,6 +437,52 @@ export {
   curryRight,
 } from './nlfunction/index.js'
 
+// ─── ml (machine learning) ─────────────────────────────
+export {
+  StandardScaler,
+  MinMaxScaler,
+  trainTestSplit,
+  LinearRegression,
+  KMeans,
+  confusionMatrix,
+  accuracyScore,
+  r2Score,
+  meanSquaredError,
+  meanAbsoluteError,
+  euclideanDistance,
+  manhattanDistance,
+  cosineSimilarity,
+} from './ml/index.js'
+
+// ─── stats (statistics) ────────────────────────────────
+export {
+  gammaLn,
+  erf,
+  normalPDF,
+  normalCDF,
+  binomialPMF,
+  poissonPMF,
+  skewness,
+  kurtosis,
+  quantile,
+  iqr,
+  covariance,
+  ttestInd,
+  pearsonCorrelation,
+  spearmanCorrelation,
+} from './stats/index.js'
+
+// ─── viz-data (visualization data) ─────────────────────
+export {
+  sturgesBins,
+  freedmanDiaconisBins,
+  histogram,
+  kde,
+  boxPlotData,
+  ecdf,
+  colorMap,
+} from './viz-data/index.js'
+
 // ─── nlarray (NumPy-like NDArray) ──────────────────────
 export { NDArray, sin, cos, exp, log, sqrt } from './nlarray/index.js'
 

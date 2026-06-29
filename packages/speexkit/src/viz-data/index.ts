@@ -1,4 +1,4 @@
-﻿export function sturgesBins(data: number[]): number {
+export function sturgesBins(data: number[]): number {
   return Math.ceil(1 + Math.log2(data.length))
 }
 export function freedmanDiaconisBins(data: number[]): number {
@@ -71,7 +71,7 @@ export function colorMap(name: string, n = 256): string[] {
     const lo = Math.floor(idx), hi = Math.ceil(idx)
     if (lo === hi) { result.push(stops[lo]!) } else {
       const t = idx - lo
-      const interp = (c1: string, c2: string, o: number) => Math.round(parseInt(c1.substr(o, 2), 16) * (1 - t) + parseInt(c2.substr(o, 2), 16) * t)
+      const interp = (c1: string, c2: string, o: number) => Math.round(parseInt(c1.slice(o, 2), 16) * (1 - t) + parseInt(c2.slice(o, 2), 16) * t)
       result.push('#' + [1, 3, 5].map(o => Math.min(255, Math.max(0, interp(stops[lo]!, stops[hi]!, o))).toString(16).padStart(2, '0')).join(''))
     }
   }

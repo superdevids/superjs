@@ -53,6 +53,7 @@ export async function serve(options: Record<string, any>): Promise<void> {
   const host = String(opts.host)
 
   async function findPort(start: number): Promise<number> {
+    if (start > 65535) { console.error('No available ports'); process.exit(1) }
     return new Promise((resolve) => {
       const server = createNetServer()
       server.on('error', () => { server.close(); resolve(findPort(start + 1)) })

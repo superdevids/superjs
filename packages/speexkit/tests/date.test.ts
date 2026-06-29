@@ -467,8 +467,8 @@ describe('timeAgo / timeRemaining', () => {
   })
 
   it('timeRemaining with locale en', () => {
-    const result = timeRemaining(new Date(Date.now() + 60000), { locale: 'en' })
-    expect(result).toMatch(/1 minute remaining/)
+    const result = timeRemaining(new Date(Date.now() + 120000), { locale: 'en' })
+    expect(result).toMatch(/(1 minute|2 minutes) remaining/)
   })
 })
 

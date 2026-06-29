@@ -87,9 +87,15 @@ export class MysqlDialect extends BaseDialect {
   makeParameter(_index: number): string { return "?" }
 
   compileLimitOffset(bindings: any[], limit: number | null, offset: number | null): string {
-    if (limit === null && offset === null) return ""
-    if (offset !== null) { bindings.push(limit ?? 0, offset); return " LIMIT ? OFFSET ?" }
-    bindings.push(limit); return " LIMIT ?"
+    if (limit === null && offset === null) return ''
+    if (limit === null) {
+      bindings.push(18446744073709551615, offset)
+      return ` LIMIT ? OFFSET ?`
+    }
+    bindings.push(limit)
+    let sql = ` LIMIT ?`
+    if (offset !== null) { bindings.push(offset); sql += ` OFFSET ?` }
+    return sql
   }
 
   compileInsertReturning(sql: string, _bindings: any[], _idColumn?: string): string {
