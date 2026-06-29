@@ -8,8 +8,19 @@ interface QueryEntry {
   timestamp: number
 }
 
+interface RateLimitEvent {
+  ip: string
+  blocked: boolean
+  count: number
+  max: number
+  timestamp: number
+  path?: string
+}
+
 const MAX_QUERIES = 100
 const queryBuffer: QueryEntry[] = []
+const MAX_RATE_LIMIT_EVENTS = 200
+const rateLimitEvents: RateLimitEvent[] = []
 
 export function trackQuery(sql: string, duration: number, bindings?: any[]): void {
   queryBuffer.push({ sql, bindings, duration, timestamp: Date.now() })
@@ -24,6 +35,21 @@ export function getRecentQueries(): QueryEntry[] {
 
 export function clearQueries(): void {
   queryBuffer.length = 0
+}
+
+export function trackRateLimitEvent(ip: string, blocked: boolean, count: number, max: number): void {
+  rateLimitEvents.push({ ip, blocked, count, max, timestamp: Date.now() })
+  if (rateLimitEvents.length > MAX_RATE_LIMIT_EVENTS) {
+    rateLimitEvents.splice(0, rateLimitEvents.length - MAX_RATE_LIMIT_EVENTS)
+  }
+}
+
+export function getRateLimitEvents(): RateLimitEvent[] {
+  return [...rateLimitEvents]
+}
+
+export function clearRateLimitEvents(): void {
+  rateLimitEvents.length = 0
 }
 
 export function wrapConnection(connection: DatabaseConnection): DatabaseConnection {
@@ -132,6 +158,39 @@ export function generateDashboardHtml(
     .map(([k, v]) => `<tr><td>${k}</td><td class="mono">${v}</td></tr>`)
     .join('\n')
 
+  const rlEvents = getRateLimitEvents()
+  const totalBlocked = rlEvents.filter((e) => e.blocked).length
+  const topOffenders: Record<string, { blocked: number; total: number }> = {}
+  for (const e of rlEvents) {
+    let entry = topOffenders[e.ip]
+    if (!entry) {
+      entry = { blocked: 0, total: 0 }
+      topOffenders[e.ip] = entry
+    }
+    entry.total++
+    if (e.blocked) entry.blocked++
+  }
+  const topOffenderList = Object.entries(topOffenders)
+    .sort((a, b) => b[1].blocked - a[1].blocked)
+    .slice(0, 10)
+
+  const rlRows = rlEvents
+    .slice()
+    .reverse()
+    .slice(0, 50)
+    .map((e) => {
+      const statusColor = e.blocked ? '#f85149' : '#3fb950'
+      return `<tr><td class="muted nowrap">${new Date(e.timestamp).toLocaleTimeString()}</td><td class="mono">${escapeHtml(e.ip)}</td><td class="mono" style="color:${statusColor}">${e.blocked ? 'BLOCKED' : 'OK'}</td><td class="mono right">${e.count}/${e.max}</td></tr>`
+    })
+    .join('\n')
+
+  const topOffenderRows = topOffenderList
+    .map(
+      ([ip, stats]) =>
+        `<tr><td class="mono">${escapeHtml(ip)}</td><td class="mono right">${stats.total}</td><td class="mono right" style="color:#f85149">${stats.blocked}</td></tr>`,
+    )
+    .join('\n')
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -171,6 +230,7 @@ export function generateDashboardHtml(
   <div class="grid">
     <div class="stat"><div class="lbl">Routes</div><div class="val">${routes.length}</div></div>
     <div class="stat"><div class="lbl">Queries</div><div class="val">${queries.length}</div></div>
+    <div class="stat"><div class="lbl">Rate Limit Events</div><div class="val">${rlEvents.length}</div><div class="sub">Blocked: ${totalBlocked}</div></div>
     <div class="stat"><div class="lbl">Cache Hits</div><div class="val">${cacheStats?.hits ?? '-'}</div><div class="sub">Misses: ${cacheStats?.misses ?? '-'}</div></div>
     <div class="stat"><div class="lbl">Cache Keys</div><div class="val">${cacheStats?.keys ?? '-'}</div><div class="sub">Size: ${cacheStats?.size ?? '-'}</div></div>
     <div class="stat"><div class="lbl">Node.js</div><div class="val" style="font-size:1.25rem">${sys.nodeVersion}</div></div>
@@ -184,6 +244,20 @@ export function generateDashboardHtml(
     <h2>Database Queries <span style="color:#8b949e;font-weight:400;font-size:0.8rem">(last ${queries.length})</span></h2>
     ${queries.length > 0 ? `<table><thead><tr><th>Time</th><th>SQL</th><th style="text-align:right">Duration</th></tr></thead><tbody>${queryRows}</tbody></table>` : '<p>No queries executed yet.</p>'}
   </div>
+  ${
+    rlEvents.length > 0
+      ? `<div class="section">
+    <h2>Rate Limit Events <span style="color:#8b949e;font-weight:400;font-size:0.8rem">(last ${rlEvents.length})</span></h2>
+    <table><thead><tr><th>Time</th><th>IP</th><th>Status</th><th style="text-align:right">Count/Max</th></tr></thead><tbody>${rlRows}</tbody></table>
+    ${
+      topOffenderList.length > 0
+        ? `<h3 style="font-size:0.9rem;color:#f0f6fc;margin-top:1rem;margin-bottom:0.5rem">Top Offenders</h3>
+    <table><thead><tr><th>IP</th><th style="text-align:right">Total</th><th style="text-align:right">Blocked</th></tr></thead><tbody>${topOffenderRows}</tbody></table>`
+        : ''
+    }
+  </div>`
+      : ''
+  }
   ${
     cacheStats
       ? `<div class="section"><h2>Cache Stats</h2><table><thead><tr><th>Metric</th><th>Value</th></tr></thead><tbody>
@@ -207,4 +281,4 @@ export function generateDashboardHtml(
 </html>`
 }
 
-export { queryBuffer }
+export { queryBuffer, rateLimitEvents }

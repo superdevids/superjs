@@ -62,6 +62,34 @@
       "import": "./dist/server/database/index.js",
       "types": "./dist/server/database/index.d.ts"
     },
+    "./server/plugin": {
+      "import": "./dist/server/plugin/index.js",
+      "types": "./dist/server/plugin/index.d.ts"
+    },
+    "./server/plugin/presets": {
+      "import": "./dist/server/plugin/presets.js",
+      "types": "./dist/server/plugin/presets.d.ts"
+    },
+    "./server/testing": {
+      "import": "./dist/server/testing/index.js",
+      "types": "./dist/server/testing/index.d.ts"
+    },
+    "./server/testing/bootstrap": {
+      "import": "./dist/server/testing/bootstrap.js",
+      "types": "./dist/server/testing/bootstrap.d.ts"
+    },
+    "./server/testing/database": {
+      "import": "./dist/server/testing/database.js",
+      "types": "./dist/server/testing/database.d.ts"
+    },
+    "./server/audit": {
+      "import": "./dist/server/audit/index.js",
+      "types": "./dist/server/audit/index.d.ts"
+    },
+    "./server/webhook": {
+      "import": "./dist/server/webhook/index.js",
+      "types": "./dist/server/webhook/index.d.ts"
+    },
     "./client": {
       "import": "./dist/client/index.js",
       "types": "./dist/client/index.d.ts"

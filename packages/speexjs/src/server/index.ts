@@ -56,11 +56,12 @@ export {
   normalizeError,
 } from './errors'
 export { Controller, controller, get, post, put, del } from './controller'
-// `patch` decorator not re-exported here to avoid conflict with client VDOM `patch`
 export { patch as patchDecorator } from './controller'
 export { SmartErrorHandler } from './errors/handler.js'
 export type { ErrorHint } from './errors/handler.js'
 export { generateDashboardHtml, trackQuery, getRecentQueries, clearQueries, wrapConnection } from './debug/dashboard.js'
+export { Audit, auditMiddleware } from './audit/index.js'
+export { Webhook } from './webhook/index.js'
 
 export interface AppOptions {
   engine?: ServerEngine

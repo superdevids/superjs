@@ -27,7 +27,7 @@ export class TestRequest {
     return this.request('DELETE', path)
   }
 
-  private async request(method: string, path: string, body?: unknown): Promise<TestResponse> {
+  protected async request(method: string, path: string, body?: unknown): Promise<TestResponse> {
     const socket = new Socket()
     const req = new IncomingMessage(socket)
     req.method = method
@@ -35,12 +35,12 @@ export class TestRequest {
     req.headers = { 'content-type': body ? 'application/json' : undefined }
 
     const res = new ServerResponse(req)
-    
+
     const sreq = new SuperRequest(req as any)
     const sres = new SuperResponse(res as any)
 
     if (body && method !== 'GET') {
-      (sreq as any)._bodyReadPromise = Promise.resolve({
+      ;(sreq as any)._bodyReadPromise = Promise.resolve({
         raw: Buffer.from(JSON.stringify(body)),
         text: JSON.stringify(body),
         json: body,
@@ -66,18 +66,26 @@ export class TestResponse {
   constructor(res: SuperResponse) {
     this.sentStatus = res.statusCode
     this.sentHeaders = {}
-    ;(res as any).flush = async function(this: any) {
+    ;(res as any).flush = async function (this: any) {
       this.sentStatus = this.statusCode
       this.sentData = this.body
     }.bind(res)
   }
 
-  get status(): number { return this.sentStatus }
-  get body(): any { return this.sentData }
+  get status(): number {
+    return this.sentStatus
+  }
+  get body(): any {
+    return this.sentData
+  }
 
   json(): any {
     if (typeof this.sentData === 'string') {
-      try { return JSON.parse(this.sentData) } catch { return this.sentData }
+      try {
+        return JSON.parse(this.sentData)
+      } catch {
+        return this.sentData
+      }
     }
     return this.sentData
   }
@@ -91,11 +99,23 @@ export { actingAs } from './auth.js'
 export { travelTo, travelBack, now } from './clock.js'
 export { RefreshDatabase } from './database.js'
 
-export function assertOk(res: TestResponse): void { if (res.status < 200 || res.status >= 300) throw new Error(`Expected 2xx, got ${res.status}`) }
-export function assertStatus(res: TestResponse, status: number): void { if (res.status !== status) throw new Error(`Expected status ${status}, got ${res.status}`) }
-export function assertJson(res: TestResponse): void { const j = res.json(); if (typeof j !== 'object') throw new Error('Response is not JSON') }
-export function assertSee(res: TestResponse, text: string): void { const body = String(res.body); if (!body.includes(text)) throw new Error(`Expected response to contain "${text}"`) }
-export function assertRedirect(res: TestResponse): void { if (res.status < 300 || res.status >= 400) throw new Error(`Expected redirect (3xx), got ${res.status}`) }
+export function assertOk(res: TestResponse): void {
+  if (res.status < 200 || res.status >= 300) throw new Error(`Expected 2xx, got ${res.status}`)
+}
+export function assertStatus(res: TestResponse, status: number): void {
+  if (res.status !== status) throw new Error(`Expected status ${status}, got ${res.status}`)
+}
+export function assertJson(res: TestResponse): void {
+  const j = res.json()
+  if (typeof j !== 'object') throw new Error('Response is not JSON')
+}
+export function assertSee(res: TestResponse, text: string): void {
+  const body = String(res.body)
+  if (!body.includes(text)) throw new Error(`Expected response to contain "${text}"`)
+}
+export function assertRedirect(res: TestResponse): void {
+  if (res.status < 300 || res.status >= 400) throw new Error(`Expected redirect (3xx), got ${res.status}`)
+}
 
 export function testRequest(app: SuperApp): TestRequest {
   return new TestRequest(app)

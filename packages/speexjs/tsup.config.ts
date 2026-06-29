@@ -15,6 +15,8 @@ export default defineConfig({
     'server/storage/index': 'src/server/storage/index.ts',
     'server/events/index': 'src/server/events/index.ts',
     'server/database/index': 'src/server/database/index.ts',
+    'server/audit/index': 'src/server/audit/index.ts',
+    'server/webhook/index': 'src/server/webhook/index.ts',
     'client/index': 'src/client/index.ts',
     'client/signals/index': 'src/client/signals/index.ts',
     'client/vdom/index': 'src/client/vdom/index.ts',

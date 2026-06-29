@@ -150,7 +150,6 @@ export function session(options?: SessionOptions): Middleware {
     const sessionId = request.cookie(opts.name) ?? generateSessionId()
     const id = sessionId
 
-    // Clean expired sessions every 100 requests (deterministic)
     cleanupCounter++
     if (cleanupCounter >= 100) {
       cleanupCounter = 0
@@ -164,7 +163,6 @@ export function session(options?: SessionOptions): Middleware {
 
     const now = Date.now()
 
-    // Check if existing session is expired
     const existing = sessions.get(id)
     if (existing && (now - existing.createdAt > ABSOLUTE_MAX_AGE || now - existing.lastTouchedAt > SESSION_TTL)) {
       sessions.delete(id)
@@ -239,12 +237,27 @@ export function throttle(limitOrLimiter?: number | RouteRateLimiter, windowSecon
     cleanup.unref()
   }
 
+  let trackEvent: ((key: string, blocked: boolean, count: number, max: number) => void) | undefined
+
+  async function trackRateLimitEventAsync(ip: string, blocked: boolean, count: number, max: number): Promise<void> {
+    if (trackEvent === undefined) {
+      try {
+        const mod = await import('../debug/dashboard.js')
+        if (typeof mod.trackRateLimitEvent === 'function') {
+          trackEvent = mod.trackRateLimitEvent
+        }
+      } catch {
+        trackEvent = null as unknown as typeof trackEvent
+      }
+    }
+    if (trackEvent) trackEvent(ip, blocked, count, max)
+  }
+
   return (ctx: RouteContext, next: () => Promise<void>) => {
     const forwarded = ctx.request.headers.get('x-forwarded-for')
     const ip = (forwarded !== undefined ? forwarded.split(',')[0]?.trim() : undefined) || ctx.request.ip
     const key = normalizeIp(ip)
 
-    // Resolve effective limits — check route-level config if limiter is available
     let maxRequests = defaultMax
     let timeWindow = defaultWindow
     if (limiter) {
@@ -263,6 +276,7 @@ export function throttle(limitOrLimiter?: number | RouteRateLimiter, windowSecon
       ctx.response.header('x-ratelimit-limit', String(maxRequests))
       ctx.response.header('x-ratelimit-remaining', String(maxRequests - 1))
       ctx.response.header('x-ratelimit-reset', String(now + timeWindow))
+      void trackRateLimitEventAsync(key, false, 1, maxRequests)
       return next()
     }
 
@@ -279,9 +293,11 @@ export function throttle(limitOrLimiter?: number | RouteRateLimiter, windowSecon
         error: 'Too Many Requests',
         message: `Rate limit exceeded. Try again in ${retryAfter} seconds.`,
       })
+      void trackRateLimitEventAsync(key, true, hit.count, maxRequests)
       return
     }
 
+    void trackRateLimitEventAsync(key, false, hit.count, maxRequests)
     return next()
   }
 }
@@ -328,7 +344,6 @@ export function staticFiles(root: string, options?: StaticOptions): Middleware {
 
     let fullPath = join(root, filePath)
 
-    // Path traversal protection
     const resolvedRoot = resolve(root)
     const resolvedPath = resolve(fullPath)
     if (!resolvedPath.startsWith(resolvedRoot)) {
@@ -348,7 +363,6 @@ export function staticFiles(root: string, options?: StaticOptions): Middleware {
       if (!found) return next()
     }
 
-    // Try pre-compressed version
     if (ctx.request.headers.get('accept-encoding')?.includes('gzip')) {
       const gzPath = fullPath + '.gz'
       if (existsSync(gzPath)) {
@@ -406,7 +420,6 @@ export function csrf(): Middleware {
   return (ctx: RouteContext, next: () => Promise<void>) => {
     const { request, response } = ctx
 
-    // Set CSRF cookie if not present (works on first GET)
     const existingCookie = request.cookie(COOKIE_NAME)
     if (existingCookie === undefined) {
       const token = generateToken()
@@ -422,7 +435,6 @@ export function csrf(): Middleware {
       return next()
     }
 
-    // Double-submit: compare cookie value vs header value
     const cookieToken = request.cookie(COOKIE_NAME)
     const headerToken = request.headers.get(HEADER_NAME)
 
@@ -562,3 +574,156 @@ export class MiddlewarePipeline {
     return [...this.middlewares]
   }
 }
+
+export class Pipeline {
+  private middlewares: Middleware[] = []
+  private handler: (() => Promise<void>) | null = null
+  private errorHandler: ((err: Error) => void | Promise<void>) | null = null
+
+  through(middleware: Middleware | Middleware[]): this {
+    const mw = Array.isArray(middleware) ? middleware : [middleware]
+    this.middlewares.push(...mw)
+    return this
+  }
+
+  then(handler: () => Promise<void>): this {
+    this.handler = handler
+    return this
+  }
+
+  catch(errorHandler: (err: Error) => void | Promise<void>): this {
+    this.errorHandler = errorHandler
+    return this
+  }
+
+  async run(ctx: RouteContext): Promise<void> {
+    let index = 0
+
+    const next = async (): Promise<void> => {
+      if (index >= this.middlewares.length) {
+        if (this.handler) {
+          await this.handler()
+        }
+        return
+      }
+
+      const middleware = this.middlewares[index] as Middleware
+      index++
+      await middleware(ctx, next)
+    }
+
+    try {
+      await next()
+    } catch (err: unknown) {
+      if (this.errorHandler) {
+        await this.errorHandler(err instanceof Error ? err : new Error(String(err)))
+      } else {
+        throw err
+      }
+    }
+  }
+
+  clone(): Pipeline {
+    const p = new Pipeline()
+    p.middlewares = [...this.middlewares]
+    p.handler = this.handler
+    p.errorHandler = this.errorHandler
+    return p
+  }
+}
+
+export function pipe(...middleware: Middleware[]): Middleware {
+  return async (ctx: RouteContext, next: () => Promise<void>) => {
+    let index = 0
+
+    const runNext = async (): Promise<void> => {
+      if (index >= middleware.length) {
+        await next()
+        return
+      }
+
+      const mw = middleware[index] as Middleware
+      index++
+      await mw(ctx, runNext)
+    }
+
+    await runNext()
+  }
+}
+
+export function when(condition: (ctx: RouteContext) => boolean, middleware: Middleware): Middleware {
+  return async (ctx: RouteContext, next: () => Promise<void>) => {
+    if (condition(ctx)) {
+      await middleware(ctx, next)
+    } else {
+      await next()
+    }
+  }
+}
+
+export function unless(condition: (ctx: RouteContext) => boolean, middleware: Middleware): Middleware {
+  return async (ctx: RouteContext, next: () => Promise<void>) => {
+    if (!condition(ctx)) {
+      await middleware(ctx, next)
+    } else {
+      await next()
+    }
+  }
+}
+
+export function throttleDynamic(getLimit: (ctx: RouteContext) => { max: number; window: number }): Middleware {
+  const hits = new Map<string, { count: number; resetAt: number }>()
+
+  const cleanup = setInterval(() => {
+    const now = Date.now()
+    for (const [key, value] of hits) {
+      if (value.resetAt < now) {
+        hits.delete(key)
+      }
+    }
+  }, 60000)
+
+  if (cleanup.unref !== undefined) {
+    cleanup.unref()
+  }
+
+  return (ctx: RouteContext, next: () => Promise<void>) => {
+    const { max: maxRequests, window: windowSeconds } = getLimit(ctx)
+    const timeWindow = windowSeconds * 1000
+
+    const forwarded = ctx.request.headers.get('x-forwarded-for')
+    const ip = (forwarded !== undefined ? forwarded.split(',')[0]?.trim() : undefined) || ctx.request.ip
+    const key = ip.startsWith('::ffff:') ? ip.slice(7) : ip
+
+    const now = Date.now()
+    const hit = hits.get(key)
+
+    if (hit === undefined || hit.resetAt < now) {
+      hits.set(key, { count: 1, resetAt: now + timeWindow })
+      ctx.response.header('x-ratelimit-limit', String(maxRequests))
+      ctx.response.header('x-ratelimit-remaining', String(maxRequests - 1))
+      ctx.response.header('x-ratelimit-reset', String(now + timeWindow))
+      return next()
+    }
+
+    hit.count++
+    const remaining = Math.max(0, maxRequests - hit.count)
+    ctx.response.header('x-ratelimit-limit', String(maxRequests))
+    ctx.response.header('x-ratelimit-remaining', String(remaining))
+    ctx.response.header('x-ratelimit-reset', String(hit.resetAt))
+
+    if (hit.count > maxRequests) {
+      const retryAfter = Math.ceil((hit.resetAt - now) / 1000)
+      ctx.response.header('retry-after', String(retryAfter))
+      ctx.response.status(HttpStatus.TOO_MANY_REQUESTS).json({
+        error: 'Too Many Requests',
+        message: `Rate limit exceeded. Try again in ${retryAfter} seconds.`,
+      })
+      return
+    }
+
+    return next()
+  }
+}
+
+export { tenant } from './tenant.js'

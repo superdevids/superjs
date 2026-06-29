@@ -6,23 +6,25 @@ import { createServer as createNetServer } from 'node:net'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { colors } from '../../native/colors.js'
 import { logger } from '../../native/logger.js'
-// HMR uses dynamic import of 'ws' - graceful fallback if unavailable
 
 interface ServeOptions {
   port?: string | number
   host?: string
   dev?: string | boolean
   docs?: boolean
+  production?: boolean
 }
 
 type ProcessState = 'idle' | 'starting' | 'running' | 'stopped' | 'restarting'
 
 export async function serve(options: Record<string, any>): Promise<void> {
+  const isProduction = options.production === true || options.production === 'true' || process.env.NODE_ENV === 'production'
   const opts: ServeOptions = {
     port: options.port || options.p || 3000,
     host: options.host || options.H || 'localhost',
-    dev: options.dev !== false,
+    dev: isProduction ? false : options.dev !== false,
     docs: !!options.docs,
+    production: isProduction,
   }
 
   const host = String(opts.host)
@@ -67,6 +69,108 @@ export async function serve(options: Record<string, any>): Promise<void> {
     return
   }
 
+  // ── Production mode: serve pre-built assets with optimized server ──
+  if (opts.production) {
+    const distIndex = resolve(process.cwd(), 'dist/index.js')
+    const distServer = resolve(process.cwd(), 'dist/server/index.js')
+    const distApp = resolve(process.cwd(), 'dist/app.js')
+    const publicDir = resolve(process.cwd(), 'public')
+
+    let prodEntry: string | null = null
+    if (existsSync(distApp)) prodEntry = distApp
+    else if (existsSync(distIndex)) prodEntry = distIndex
+    else if (existsSync(distServer)) prodEntry = distServer
+
+    if (prodEntry) {
+      console.log()
+      console.log(`  ${colors.bold('SpeexJS')} ${colors.green('production')}`)
+      console.log(`  ${colors.dim('→')}  ${colors.cyan(`http://${host}:${port}`)}`)
+      console.log(`  ${colors.dim('→')}  Entry: ${colors.dim(prodEntry)}`)
+      if (existsSync(publicDir)) {
+        console.log(`  ${colors.dim('→')}  Static: ${colors.dim(publicDir)}`)
+      }
+      console.log()
+
+      const child = spawn('node', [prodEntry], {
+        stdio: 'inherit',
+        cwd: process.cwd(),
+        env: {
+          ...process.env,
+          NODE_ENV: 'production',
+          PORT: String(port),
+          HOST: host,
+        },
+      })
+
+      child.on('exit', (code) => {
+        process.exit(code ?? 1)
+      })
+    } else {
+      console.log()
+      console.log(`  ${colors.bold('SpeexJS')} ${colors.green('production')}`)
+      console.log(`  ${colors.dim('→')}  ${colors.cyan(`http://${host}:${port}`)}`)
+      console.log(`  ${colors.dim('→')}  Serving static files from ${colors.dim('dist/')}`)
+      console.log()
+
+      const distDir = resolve(process.cwd(), 'dist')
+      const MIME_TYPES: Record<string, string> = {
+        '.html': 'text/html; charset=utf-8',
+        '.css': 'text/css',
+        '.js': 'application/javascript',
+        '.json': 'application/json',
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.svg': 'image/svg+xml',
+        '.ico': 'image/x-icon',
+        '.webp': 'image/webp',
+        '.woff2': 'font/woff2',
+        '.txt': 'text/plain',
+        '.xml': 'application/xml',
+      }
+
+      createServer((req, res) => {
+        const url = new URL(req.url ?? '/', `http://${host}`)
+        let filePath = resolve(distDir, url.pathname === '/' ? 'index.html' : url.pathname.slice(1))
+
+        if (!existsSync(filePath)) {
+          const htmlPath = filePath.endsWith('.html') ? filePath : filePath + '.html'
+          if (existsSync(htmlPath)) {
+            filePath = htmlPath
+          } else {
+            const fallback = resolve(distDir, 'index.html')
+            if (existsSync(fallback)) {
+              filePath = fallback
+            } else {
+              res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' })
+              res.end(
+                `<!DOCTYPE html><html><head><meta charset="utf-8"><title>404</title><style>body{font-family:sans-serif;background:#0f1117;color:#e1e4e8;display:flex;align-items:center;justify-content:center;min-height:100vh;text-align:center}.code{font-size:4rem;font-weight:800;color:#d29922}h1{font-size:1.5rem;color:#f0f6fc}p{color:#8b949e}</style></head><body><div><div class="code">404</div><h1>Page Not Found</h1><p>The page you requested could not be found.</p></div></body></html>`,
+              )
+              return
+            }
+          }
+        }
+
+        const ext = filePath.substring(filePath.lastIndexOf('.'))
+        const contentType = MIME_TYPES[ext] ?? 'application/octet-stream'
+        const content = readFileSync(filePath)
+
+        const cacheMaxAge = ext === '.html' ? 0 : 31536000
+        res.writeHead(200, {
+          'Content-Type': contentType,
+          'Content-Length': content.length,
+          'Cache-Control': `public, max-age=${cacheMaxAge}`,
+          'X-Content-Type-Options': 'nosniff',
+          'X-Frame-Options': 'SAMEORIGIN',
+        })
+        res.end(content)
+      }).listen(port, host, () => {
+        console.log(`  ${colors.green('✓')} Production server running at ${colors.cyan(`http://${host}:${port}`)}`)
+      })
+    }
+    return
+  }
+
+  // ── Development mode ─────────────────────────────────────
   const serverEntry = resolve(process.cwd(), 'src/app.ts')
   const serverEntryAlt = resolve(process.cwd(), 'src/server/index.ts')
   const serverEntryIndex = resolve(process.cwd(), 'src/index.ts')
@@ -121,14 +225,12 @@ export async function serve(options: Record<string, any>): Promise<void> {
         return
       }
 
-      // Non-dev mode: hard exit (original behavior)
       if (!opts.dev) {
         console.error(`Child process exited with code ${code}`)
         process.exit(code ?? 1)
         return
       }
 
-      // ── Dev mode: graceful handling ──────────────────────
       if (state === 'starting' || state === 'restarting') {
         console.log(`\n  ${colors.yellow('⚠')}  Compilation error (process exited with code ${code})`)
         console.log(`  ${colors.yellow('⚠')}  Fix the error and save again — watcher is still running...`)
@@ -160,7 +262,6 @@ export async function serve(options: Record<string, any>): Promise<void> {
       process.exit(1)
     })
 
-    // Startup verification: mark as 'running' only after 500ms of successful operation
     startupTimer = setTimeout(() => {
       startupTimer = null
       if (childId === currentChildId && childProcess.exitCode === null) {
@@ -172,7 +273,7 @@ export async function serve(options: Record<string, any>): Promise<void> {
     return childProcess
   }
 
-  // ── HMR WebSocket server (signals browser to reload) ────
+  // ── HMR WebSocket server ─────────────────────────────────
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let hmrServer: any = null
 
@@ -188,7 +289,6 @@ export async function serve(options: Record<string, any>): Promise<void> {
     }
   }
 
-  // ── Debounced restart scheduler (300ms) ─────────────────
   function scheduleRestart(filename: string): void {
     if (debounceTimer !== null) clearTimeout(debounceTimer)
     debounceTimer = setTimeout(() => {
@@ -208,19 +308,17 @@ export async function serve(options: Record<string, any>): Promise<void> {
     }, 300)
   }
 
-  // ── HMR + File watching for dev ─────────────────────────
   if (opts.dev) {
     logger.info(`Development server starting at ${colors.cyan(`http://${host}:${port}`)}`)
 
-    // Start HMR WebSocket server (requires optional 'ws' package)
     try {
-      // @ts-expect-error - ws is optional; falls back gracefully if not installed
+      // @ts-expect-error - ws is optional
       const { WebSocketServer } = await import('ws')
       const hmrPort = port + 1
       hmrServer = new WebSocketServer({ port: hmrPort }) as any
       console.log(`  ${colors.dim('📡 HMR WebSocket at')} ${colors.cyan(`ws://${host}:${hmrPort}`)}`)
     } catch {
-      /* ws not available — HMR client reload disabled */
+      /* ws not available */
     }
 
     const srcDir = resolve(process.cwd(), 'src')
