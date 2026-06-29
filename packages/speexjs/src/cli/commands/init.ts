@@ -267,9 +267,7 @@ app.get('/', async ({ response }) => {
   \`)
 })
 
-app.listen(PORT, () => {
-  console.log(\`✓ SpeexJS running on http://localhost:\${PORT}\`)
-})
+export { app }
 `,
       'src/server/controllers/user.controller.ts': `import { Controller, get, post } from 'speexjs/server'
 
@@ -360,9 +358,7 @@ app.get('/api/health', async ({ response }) => {
   })
 })
 
-app.listen(Config.port, () => {
-  console.log(\`✓ SpeexJS API running at http://localhost:\${Config.port}\`)
-})
+export { app }
 `,
       'src/config/index.ts': `export const Config = {
   port: Number(process.env.PORT) || 3000,
@@ -431,9 +427,7 @@ app.get('/api/health', async ({ response }) => {
   return response.json({ status: 'ok', timestamp: new Date().toISOString() })
 })
 
-app.listen(PORT, () => {
-  console.log(\`⚡ SpeexJS API running on http://localhost:\${PORT}\`)
-})
+export { app }
 `,
       'src/config/index.ts': `export const Config = {
   port: Number(process.env.PORT) || 3000,
