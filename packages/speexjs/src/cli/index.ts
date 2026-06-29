@@ -35,6 +35,7 @@ function showHelp(): void {
   console.log('  --frontend <fe>      super, react, vue')
   console.log('  --port <number>      Port server (default: 3000)')
   console.log('  --host <string>      Host address (default: localhost)')
+  console.log('  --docs               Serve documentation site')
 }
 
 async function main(): Promise<void> {

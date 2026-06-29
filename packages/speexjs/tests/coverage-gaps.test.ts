@@ -3521,7 +3521,7 @@ describe('maintenance middleware', () => {
     expect(ctx.response.header).toHaveBeenCalledWith('retry-after', '120')
     expect(ctx.response.json).toHaveBeenCalledWith({
       error: 'SERVICE_UNAVAILABLE',
-      message: 'Application is in maintenance mode. Please try again later.',
+      message: 'Application is in maintenance mode.',
     })
     expect(next).not.toHaveBeenCalled()
   })

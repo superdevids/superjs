@@ -421,9 +421,52 @@ app.listen(PORT, () => {
       '.gitignore': GITIGNORE,
     },
   },
+
+  blog: {
+    dirs: ['src', 'src/config', 'src/controllers', 'src/middleware', 'src/models', 'src/pages', 'public'],
+    files: {
+      'package.json': (name: string) => pkg(name, { dev: 'speexjs serve', build: 'speexjs build', start: 'node dist/index.js' }),
+      'tsconfig.json': tsconfig({ jsx: 'react-jsx', jsxImportSource: '@speexjs/vdom' }, { include: ['src/**/*.ts', 'src/**/*.tsx'] }),
+      'src/index.ts': `import { speexjs, cors, bodyParser, PageView, staticFiles } from 'speexjs/server'
+import { Config } from './config/index.js'
+
+const app = speexjs()
+const view = new PageView()
+
+app.use(cors())
+app.use(staticFiles('public', { maxAge: 86400 }))
+app.use(bodyParser())
+
+app.get('/', async ({ response }) => response.setViewEngine(view).page('home', { title: 'My Blog' }))
+app.get('/blog/:slug', async ({ response, params }) => response.setViewEngine(view).page('post', { slug: params.slug }))
+
+app.listen(Config.port, () => console.log(\`Blog running at http://localhost:\${Config.port}\`))
+export { app }
+`,
+      'src/config/index.ts': `export const Config = { port: Number(process.env.PORT) || 3000, env: process.env.NODE_ENV || 'development' } as const`,
+      'src/pages/home.tsx': `import type { VNode } from 'speexjs/client/vdom'
+interface Props { title?: string }
+export default function Home({ title }: Props): VNode {
+  return <html lang="en"><head><meta charSet="utf-8"/><title>{title ?? 'Blog'}</title></head>
+  <body style="font-family: sans-serif; padding: 2rem; max-width: 800px; margin: 0 auto;">
+  <h1>{title ?? 'My Blog'}</h1><p>Welcome to my blog built with SpeexJS!</p>
+  </body></html>
+}`,
+      'src/pages/post.tsx': `import type { VNode } from 'speexjs/client/vdom'
+interface Props { slug?: string }
+export default function Post({ slug }: Props): VNode {
+  return <html lang="en"><head><meta charSet="utf-8"/><title>{slug ?? 'Post'}</title></head>
+  <body style="font-family: sans-serif; padding: 2rem; max-width: 800px; margin: 0 auto;">
+  <h1>Post: {slug}</h1><a href="/" style="color: #0066cc;">Back</a>
+  </body></html>
+}`,
+      '.env.example': 'PORT=3000\nNODE_ENV=development\n',
+      '.gitignore': 'node_modules/\ndist/\n.env\n',
+    },
+  },
 }
 
-const TEMPLATE_ALIASES: Record<string, string> = { api: 'api-only', full: 'fullstack', spark: 'spark' }
+const TEMPLATE_ALIASES: Record<string, string> = { api: 'api-only', full: 'fullstack', spark: 'spark', blog: 'blog' }
 
 function getTemplate(name: string): string {
   return TEMPLATE_ALIASES[name] ?? name
@@ -445,7 +488,7 @@ export async function initProject(name: string, options: Record<string, any>): P
   const template = TEMPLATES[templateName]
 
   if (!template) {
-    console.error(colors.red(`Unknown template '${options.template}'. Use: blank, fullstack, api-only, spark`))
+    console.error(colors.red(`Unknown template '${options.template}'. Use: blank, fullstack, api-only, spark, blog`))
     process.exit(1)
   }
 

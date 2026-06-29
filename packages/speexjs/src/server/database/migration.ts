@@ -594,8 +594,12 @@ export class Migrator {
 		}
 	}
 
-	async reset(): Promise<void> {
-		await this.ensureMigrationTable();
+  async rollbackBatch(batch: number): Promise<void> {
+    await this.connection.raw('DELETE FROM speexjs_migrations WHERE batch = ?', [batch])
+  }
+
+  async reset(): Promise<void> {
+    await this.ensureMigrationTable();
 
 		const allRan = await this.getRanMigrations();
 		const schema = new SchemaBuilder(this.connection);

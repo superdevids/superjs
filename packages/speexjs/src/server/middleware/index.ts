@@ -211,6 +211,7 @@ export function throttle(limit?: number, window?: number): Middleware {
 			hits.set(key, { count: 1, resetAt: now + timeWindow });
 			ctx.response.header("x-ratelimit-limit", String(maxRequests));
 			ctx.response.header("x-ratelimit-remaining", String(maxRequests - 1));
+			ctx.response.header("x-ratelimit-reset", String(now + timeWindow));
 			return next();
 		}
 
@@ -218,6 +219,7 @@ export function throttle(limit?: number, window?: number): Middleware {
 		const remaining = Math.max(0, maxRequests - hit.count);
 		ctx.response.header("x-ratelimit-limit", String(maxRequests));
 		ctx.response.header("x-ratelimit-remaining", String(remaining));
+		ctx.response.header("x-ratelimit-reset", String(hit.resetAt));
 
 		if (hit.count > maxRequests) {
 			const retryAfter = Math.ceil((hit.resetAt - now) / 1000);
@@ -328,6 +330,15 @@ export function staticFiles(root: string, options?: StaticOptions): Middleware {
 			if (!found) return next();
 		}
 
+		// Try pre-compressed version
+		if (ctx.request.headers.get('accept-encoding')?.includes('gzip')) {
+			const gzPath = fullPath + '.gz'
+			if (existsSync(gzPath)) {
+				fullPath = gzPath
+				ctx.response.header('content-encoding', 'gzip')
+			}
+		}
+
 		const stats = statSync(fullPath);
 		if (!stats.isFile()) {
 			if (stats.isDirectory()) {
@@ -413,6 +424,11 @@ export function csrf(): Middleware {
 		}
 
 		tokens.delete(token);
+
+		// Auto-refresh: issue new token in response header
+		const newToken = randomUUID()
+		tokens.set(newToken, Date.now() + TTL)
+		response.header('x-csrf-token', newToken)
 
 		return next();
 	};

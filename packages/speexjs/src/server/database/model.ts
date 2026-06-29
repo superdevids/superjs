@@ -1,7 +1,7 @@
 import { QueryBuilder } from './query.js'
 import type { QueryRunner } from './types.js'
 
-export type RelationType = 'hasOne' | 'hasMany' | 'belongsTo' | 'belongsToMany' | 'morphMany' | 'morphTo'
+export type RelationType = 'hasOne' | 'hasMany' | 'belongsTo' | 'belongsToMany' | 'morphOne' | 'morphMany' | 'morphTo'
 
 interface RelationDefinition {
   type: RelationType
@@ -108,6 +108,21 @@ export class Model {
       type: 'morphMany',
       relatedModel,
       foreignKey: `${morphName}_id`,
+      localKey: 'id',
+      morphName,
+    })
+  }
+
+  static morphOne(
+    relatedModel: typeof Model,
+    morphName: string,
+    foreignKey?: string,
+  ): void {
+    const key = `morphOne:${morphName}`
+    this.relationDefs.set(key, {
+      type: 'morphOne',
+      relatedModel,
+      foreignKey: foreignKey ?? `${morphName}_id`,
       localKey: 'id',
       morphName,
     })
@@ -249,6 +264,16 @@ export class Model {
           .whereIn(`${def.morphName}_id`, localIds).get()
         for (const inst of instances) {
           inst._relations[key] = related.filter((r: any) => r[`${def.morphName}_id`] === inst[def.localKey])
+        }
+      }
+
+      if (def.type === 'morphOne' && def.morphName) {
+        if (!def.relatedModel.queryRunner) def.relatedModel.setConnection(this.queryRunner!)
+        const related = await def.relatedModel.query()
+          .where(`${def.morphName}_type`, this.name)
+          .whereIn(`${def.morphName}_id`, localIds).get()
+        for (const inst of instances) {
+          inst._relations[key] = related.find((r: any) => r[`${def.morphName}_id`] === inst[def.localKey]) ?? null
         }
       }
     }

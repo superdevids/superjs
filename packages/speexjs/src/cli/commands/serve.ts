@@ -1,6 +1,7 @@
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { createServer } from 'node:http'
 import { colors } from '../../native/colors.js'
 import { logger } from '../../native/logger.js'
 
@@ -8,6 +9,7 @@ interface ServeOptions {
   port?: string | number
   host?: string
   dev?: string | boolean
+  docs?: boolean
 }
 
 /**
@@ -44,10 +46,30 @@ export async function serve(options: Record<string, any>): Promise<void> {
     port: options.port || options.p || 3000,
     host: options.host || options.H || 'localhost',
     dev: options.dev !== false,
+    docs: !!options.docs,
   }
 
   const port = parseInt(String(opts.port), 10)
   const host = String(opts.host)
+
+  if (opts.docs) {
+    const docsPath = resolve(import.meta.dirname, '../../docs/index.html')
+    if (!existsSync(docsPath)) {
+      console.error(colors.red('Documentation not found. Ensure docs/index.html exists in the speexjs package.'))
+      process.exit(1)
+    }
+    const html = readFileSync(docsPath, 'utf-8')
+    createServer((_req, res) => {
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
+      res.end(html)
+    }).listen(port, host, () => {
+      console.log()
+      console.log(`  ${colors.bold('SpeexJS')} ${colors.green('docs')}`)
+      console.log(`  ${colors.dim('→')}  ${colors.cyan(`http://${host}:${port}`)}`)
+      console.log()
+    })
+    return
+  }
 
   const serverEntry = resolve(process.cwd(), 'src/app.ts')
   const serverEntryAlt = resolve(process.cwd(), 'src/server/index.ts')

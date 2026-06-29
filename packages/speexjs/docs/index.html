@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SpeexJS — Documentation</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --sidebar: #161822;
+    --card: #1c1e2e;
+    --border: #2a2d3e;
+    --text: #e4e6f0;
+    --muted: #888ca6;
+    --accent: #6c7bff;
+    --accent-dim: #4a56cc;
+    --green: #4ade80;
+    --orange: #fb923c;
+    --pink: #f472b6;
+    --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif;
+    --mono: 'SF Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    min-height: 100vh;
+    line-height: 1.7;
+    font-size: 15px;
+  }
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* ─── Sidebar ─── */
+  .sidebar {
+    width: 260px;
+    flex-shrink: 0;
+    background: var(--sidebar);
+    border-right: 1px solid var(--border);
+    padding: 24px 16px;
+    overflow-y: auto;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+  }
+  .sidebar h1 {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .sidebar h1 span { color: var(--accent); }
+  .sidebar nav { display: flex; flex-direction: column; gap: 2px; }
+  .sidebar .section-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+    margin: 20px 0 8px 8px;
+  }
+  .sidebar a {
+    color: var(--muted);
+    text-decoration: none;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 14px;
+    transition: all .15s;
+  }
+  .sidebar a:hover, .sidebar a.active { color: var(--text); background: var(--card); }
+
+  /* ─── Main ─── */
+  .main { flex: 1; padding: 40px 48px; max-width: 900px; }
+  .main h2 {
+    font-size: 26px;
+    font-weight: 700;
+    margin: 40px 0 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .main h2:first-child { margin-top: 0; }
+  .main h3 { font-size: 18px; font-weight: 600; margin: 28px 0 12px; }
+  .main h4 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; color: var(--accent); }
+  .main p { margin-bottom: 16px; color: var(--muted); }
+  .main p strong { color: var(--text); }
+  .main a { color: var(--accent); text-decoration: none; }
+  .main a:hover { text-decoration: underline; }
+  .main ul, .main ol { margin: 0 0 16px 24px; color: var(--muted); }
+  .main li { margin-bottom: 6px; }
+
+  /* ─── Code ─── */
+  code {
+    font-family: var(--mono);
+    font-size: 13px;
+    background: var(--card);
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: var(--pink);
+  }
+  pre {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    overflow-x: auto;
+    margin: 0 0 20px;
+  }
+  pre code {
+    background: none;
+    padding: 0;
+    color: var(--text);
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  .kw { color: var(--accent); }
+  .fn { color: var(--green); }
+  .str { color: var(--orange); }
+  .cm { color: var(--muted); font-style: italic; }
+  .num { color: var(--pink); }
+
+  /* ─── Tables ─── */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0 0 20px;
+    font-size: 14px;
+  }
+  th, td {
+    text-align: left;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  th { color: var(--text); font-weight: 600; }
+  td { color: var(--muted); }
+  td code { font-size: 12px; }
+
+  /* ─── Badge ─── */
+  .badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+  }
+  .badge-green { background: rgba(74,222,128,.15); color: var(--green); }
+  .badge-orange { background: rgba(251,146,60,.15); color: var(--orange); }
+
+  .main-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+  .main-header .badge { margin: 0; }
+  .main > p:first-of-type { font-size: 16px; }
+
+  @media (max-width: 768px) {
+    .sidebar { display: none; }
+    .main { padding: 24px 20px; }
+  }
+</style>
+</head>
+<body>
+<aside class="sidebar">
+  <h1><span>Sp</span>eexJS</h1>
+  <nav>
+    <div class="section-label">Getting Started</div>
+    <a href="#overview" class="active">Overview</a>
+    <a href="#quickstart">Quick Start</a>
+    <a href="#installation">Installation</a>
+
+    <div class="section-label">Core</div>
+    <a href="#server">Server</a>
+    <a href="#routing">Routing</a>
+    <a href="#middleware">Middleware</a>
+    <a href="#controllers">Controllers</a>
+    <a href="#container">Container</a>
+
+    <div class="section-label">Data</div>
+    <a href="#database">Database</a>
+    <a href="#models">Models</a>
+    <a href="#migrations">Migrations</a>
+    <a href="#query-builder">Query Builder</a>
+    <a href="#validation">Validation</a>
+
+    <div class="section-label">Features</div>
+    <a href="#auth">Authentication</a>
+    <a href="#cache">Cache</a>
+    <a href="#storage">Storage</a>
+    <a href="#events">Events</a>
+    <a href="#mail">Mail</a>
+    <a href="#queues">Queues</a>
+    <a href="#scheduling">Scheduling</a>
+    <a href="#websocket">WebSocket</a>
+    <a href="#cli">CLI</a>
+
+    <div class="section-label">Client</div>
+    <a href="#rpc">RPC</a>
+    <a href="#schema">Schema</a>
+
+    <div class="section-label">Reference</div>
+    <a href="#api">API Reference</a>
+    <a href="#testing">Testing</a>
+    <a href="#config">Configuration</a>
+  </nav>
+</aside>
+
+<div class="main">
+
+<div class="main-header">
+  <h2 id="overview">Overview</h2>
+  <span class="badge badge-green">v0.7.1</span>
+</div>
+<p>
+  <strong>SpeexJS</strong> is a full-stack JavaScript/TypeScript framework for building modern web applications.
+  It provides a cohesive development experience with server-side routing, middleware, database ORM,
+  authentication, caching, file storage, real-time communication, and a reactive client — all
+  under a single, zero-dependency core.
+</p>
+<p>
+  Designed for speed and simplicity, SpeexJS follows a Laravel-inspired architecture while embracing
+  modern ECMAScript standards and TypeScript first-class support.
+</p>
+
+<h3>Key Features</h3>
+<ul>
+  <li>Full-stack TypeScript with ESM native support</li>
+  <li>Laravel-style routing, controllers, and middleware pipeline</li>
+  <li>Multi-dialect database ORM (MySQL, SQLite, PostgreSQL)</li>
+  <li>Built-in authentication, caching, and file storage</li>
+  <li>Reactive client with signals and VDOM (JSX support)</li>
+  <li>Type-safe RPC layer</li>
+  <li>Schema validation</li>
+  <li>Zero runtime dependencies</li>
+  <li>CLI for scaffolding and code generation</li>
+</ul>
+
+<h2 id="quickstart">Quick Start</h2>
+<h3>Create a new project</h3>
+<pre><code>npx speexjs init my-app
+<span class="cm"># or</span>
+speexjs init my-app</code></pre>
+
+<h3>Start the development server</h3>
+<pre><code>cd my-app
+speexjs serve</code></pre>
+
+<h3>Create a controller</h3>
+<pre><code>speexjs make:controller UserController</code></pre>
+
+<h3>Define a route</h3>
+<pre><code><span class="kw">import</span> { speexjs } <span class="kw">from</span> <span class="str">'speexjs/server'</span>
+
+<span class="kw">const</span> app = speexjs()
+
+app.get(<span class="str">'/'</span>, <span class="fn">ctx</span> => {
+  ctx.response.html(<span class="str">'&lt;h1&gt;Hello SpeexJS&lt;/h1&gt;'</span>)
+})
+
+app.listen(3000)</code></pre>
+
+<h2 id="installation">Installation</h2>
+<pre><code><span class="cm"># Install globally</span>
+npm install -g speexjs
+
+<span class="cm"># Or use in your project</span>
+npm install speexjs</code></pre>
+<p>
+  SpeexJS requires <strong>Node.js 18+</strong>. No other runtime dependencies are needed.
+</p>
+
+<h2 id="server">Server</h2>
+<p>The <code>SuperApp</code> class is the core of every SpeexJS application. It bootstraps routing, middleware, and lifecycle management.</p>
+<pre><code><span class="kw">import</span> { speexjs } <span class="kw">from</span> <span class="str">'speexjs/server'</span>
+
+<span class="kw">const</span> app = speexjs({ <span class="cm">/* options */</span> })
+
+app.listen(3000, <span class="fn">()</span> => {
+  <span class="fn">console</span>.log(<span class="str">'Running on port 3000'</span>)
+})</code></pre>
+
+<h4>Options</h4>
+<table>
+  <tr><th>Option</th><th>Type</th><th>Description</th></tr>
+  <tr><td><code>engine</code></td><td><code>ServerEngine</code></td><td>HTTP engine (NodeEngine or HttpsEngine)</td></tr>
+  <tr><td><code>container</code></td><td><code>Container</code></td><td>DI container instance</td></tr>
+</table>
+
+<h2 id="routing">Routing</h2>
+<p>SpeexJS provides a clean, expressive routing API inspired by Laravel.</p>
+
+<h4>Basic routes</h4>
+<pre><code>app.get(<span class="str">'/users'</span>, handler)
+app.post(<span class="str">'/users'</span>, handler)
+app.put(<span class="str">'/users/:id'</span>, handler)
+app.patch(<span class="str">'/users/:id'</span>, handler)
+app.delete(<span class="str">'/users/:id'</span>, handler)
+
+<span class="cm">// Match multiple methods</span>
+app.match([<span class="str">'GET'</span>, <span class="str">'POST'</span>], <span class="str">'/path'</span>, handler)
+
+<span class="cm">// Any method</span>
+app.any(<span class="str">'/path'</span>, handler)</code></pre>
+
+<h4>Route groups</h4>
+<pre><code>app.group(<span class="str">'/admin'</span>, <span class="fn">router</span> => {
+  router.get(<span class="str">'/dashboard'</span>, dashboardHandler)
+  router.get(<span class="str">'/users'</span>, adminUsersHandler)
+})</code></pre>
+
+<h4>Route parameters</h4>
+<pre><code>app.get(<span class="str">'/users/:id'</span>, <span class="fn">ctx</span> => {
+  <span class="kw">const</span> { id } = ctx.params
+  ctx.response.json({ userId: id })
+})</code></pre>
+
+<h2 id="middleware">Middleware</h2>
+<p>Middleware runs before route handlers and can modify the request, response, or short-circuit the pipeline.</p>
+
+<h4>Built-in middleware</h4>
+<table>
+  <tr><th>Middleware</th><th>Description</th></tr>
+  <tr><td><code>cors()</code></td><td>Cross-Origin Resource Sharing headers</td></tr>
+  <tr><td><code>bodyParser()</code></td><td>Parse JSON and form data bodies</td></tr>
+  <tr><td><code>session()</code></td><td>Session management</td></tr>
+  <tr><td><code>csrf()</code></td><td>CSRF token protection</td></tr>
+  <tr><td><code>throttle()</code></td><td>Rate limiting</td></tr>
+  <tr><td><code>helmet()</code></td><td>Security headers</td></tr>
+  <tr><td><code>compress()</code></td><td>Gzip/brotli compression</td></tr>
+  <tr><td><code>staticFiles(path, opts)</code></td><td>Static file serving</td></tr>
+  <tr><td><code>validate(schema)</code></td><td>Request body validation</td></tr>
+  <tr><td><code>validateQuery(schema)</code></td><td>Query parameter validation</td></tr>
+</table>
+
+<pre><code><span class="kw">import</span> { speexjs, cors, bodyParser, helmet } <span class="kw">from</span> <span class="str">'speexjs/server'</span>
+
+<span class="kw">const</span> app = speexjs()
+app.use(cors())
+app.use(bodyParser())
+app.use(helmet())</code></pre>
+
+<h2 id="controllers">Controllers</h2>
+<p>Controllers group related route handlers into a single class using decorators.</p>
+
+<pre><code><span class="kw">import</span> { Controller, get, post } <span class="kw">from</span> <span class="str">'speexjs/server'</span>
+<span class="kw">import</span> type { RouteContext } <span class="kw">from</span> <span class="str">'speexjs/server/router'</span>
+
+@Controller(<span class="str">'/users'</span>)
+<span class="kw">export class</span> UserController {
+  @get(<span class="str">'/'</span>)
+  <span class="fn">async</span> index(ctx: RouteContext) {
+    ctx.response.json({ users: [] })
+  }
+
+  @post(<span class="str">'/'</span>)
+  <span class="fn">async</span> store(ctx: RouteContext) {
+    <span class="kw">const</span> data = ctx.request.body
+    ctx.response.status(201).json({ created: data })
+  }
+}</code></pre>
+
+<h4>Resource controllers</h4>
+<pre><code>app.resource(<span class="str">'users'</span>, UserController)
+<span class="cm">// Generates: index, create, store, show, edit, update, destroy</span>
+
+app.apiResource(<span class="str">'users'</span>, UserController)
+<span class="cm">// Generates: index, store, show, update, destroy</span></code></pre>
+
+<h2 id="container">Container</h2>
+<p>The dependency injection container manages class and instance resolution for your application.</p>
+
+<pre><code><span class="kw">import</span> { Container } <span class="kw">from</span> <span class="str">'speexjs/server/container'</span>
+
+<span class="kw">const</span> container = <span class="kw">new</span> Container()
+
+container.bind(<span class="str">'mailer'</span>, SmtpMailTransport)
+container.singleton(<span class="str">'db'</span>, DatabaseConnection)
+container.instance(<span class="str">'config'</span>, { key: <span class="str">'value'</span> })
+
+<span class="cm">// Resolve from anywhere</span>
+<span class="kw">const</span> mailer = container.make(<span class="str">'mailer'</span>)</code></pre>
+
+<h2 id="database">Database</h2>
+<p>SpeexJS ships with a multi-dialect ORM supporting MySQL, SQLite, and PostgreSQL.</p>
+
+<h4>Connection configuration</h4>
+<pre><code><span class="kw">import</span> { DatabaseConnection } <span class="kw">from</span> <span class="str">'speexjs/server/database'</span>
+
+<span class="kw">const</span> db = <span class="kw">new</span> DatabaseConnection({
+  driver: <span class="str">'mysql'</span>,
+  host: <span class="str">'localhost'</span>,
+  port: 3306,
+  database: <span class="str">'my_app'</span>,
+  username: <span class="str">'root'</span>,
+  password: <span class="str">'secret'</span>,
+})</code></pre>
+
+<h4>Supported drivers</h4>
+<table>
+  <tr><th>Driver</th><th>Package</th></tr>
+  <tr><td><code>mysql</code></td><td><code>mysql2</code></td></tr>
+  <tr><td><code>sqlite</code></td><td><code>better-sqlite3</code></td></tr>
+  <tr><td><code>postgresql</code></td><td><code>pg</code></td></tr>
+</table>
+
+<h2 id="models">Models</h2>
+<pre><code><span class="kw">import</span> { Model } <span class="kw">from</span> <span class="str">'speexjs/server/database'</span>
+
+<span class="kw">export class</span> User <span class="kw">extends</span> Model {
+  <span class="kw">protected</span> table = <span class="str">'users'</span>
+
+  <span class="fn">async</span> posts() {
+    <span class="kw">return this</span>.hasMany(Post)
+  }
+}
+
+<span class="cm">// Usage</span>
+<span class="kw">const</span> users = <span class="kw">await</span> User.query().where(<span class="str">'active'</span>, <span class="num">true</span>).get()
+<span class="kw">const</span> user = <span class="kw">await</span> User.find(1)
+user.name = <span class="str">'Updated'</span>
+<span class="kw">await</span> user.save()</code></pre>
+
+<h2 id="migrations">Migrations</h2>
+<pre><code><span class="kw">import</span> { SchemaBuilder } <span class="kw">from</span> <span class="str">'speexjs/server/database'</span>
+
+<span class="kw">export const</span> up = <span class="fn">async</span> (schema: SchemaBuilder) => {
+  <span class="kw">await</span> schema.create(<span class="str">'users'</span>, <span class="fn">table</span> => {
+    table.id()
+    table.string(<span class="str">'name'</span>)
+    table.string(<span class="str">'email'</span>).unique()
+    table.string(<span class="str">'password'</span>)
+    table.timestamps()
+  })
+}
+
+<span class="kw">export const</span> down = <span class="fn">async</span> (schema: SchemaBuilder) => {
+  <span class="kw">await</span> schema.drop(<span class="str">'users'</span>)
+}</code></pre>
+
+<pre><code><span class="cm"># Run migrations</span>
+speexjs migrate
+
+<span class="cm"># Seed database</span>
+speexjs db:seed</code></pre>
+
+<h2 id="query-builder">Query Builder</h2>
+<p>The fluent query builder provides a clean interface for constructing SQL queries.</p>
+
+<pre><code><span class="kw">const</span> users = <span class="kw">await</span> db
+  .table(<span class="str">'users'</span>)
+  .select(<span class="str">'id'</span>, <span class="str">'name'</span>, <span class="str">'email'</span>)
+  .where(<span class="str">'active'</span>, <span class="num">true</span>)
+  .where(<span class="str">'role'</span>, <span class="str">'admin'</span>)
+  .orderBy(<span class="str">'created_at'</span>, <span class="str">'desc'</span>)
+  .limit(<span class="num">20</span>)
+  .offset(<span class="num">0</span>)
+  .get()
+
+<span class="cm">// Aggregates</span>
+<span class="kw">const</span> count = <span class="kw">await</span> db.table(<span class="str">'users'</span>).count()
+<span class="kw">const</span> exists = <span class="kw">await</span> db.table(<span class="str">'users'</span>).where(<span class="str">'email'</span>, email).exists()
+
+<span class="cm">// Joins</span>
+<span class="kw">const</span> rows = <span class="kw">await</span> db
+  .table(<span class="str">'posts'</span>)
+  .join(<span class="str">'users'</span>, <span class="str">'users.id'</span>, <span class="str">'posts.user_id'</span>)
+  .get()</code></pre>
+
+<h2 id="validation">Validation</h2>
+<pre><code><span class="kw">import</span> { schema } <span class="kw">from</span> <span class="str">'speexjs/schema'</span>
+
+<span class="kw">const</span> userSchema = schema.object({
+  name: schema.string().min(<span class="num">2</span>).max(<span class="num">255</span>),
+  email: schema.string().email(),
+  age: schema.number().min(<span class="num">18</span>),
+})
+
+<span class="cm">// In a controller</span>
+app.post(<span class="str">'/users'</span>, validate(userSchema), <span class="fn">ctx</span> => {
+  <span class="kw">const</span> data = ctx.request.body <span class="cm">// Already validated</span>
+})</code></pre>
+
+<h2 id="auth">Authentication</h2>
+<p>SpeexJS provides built-in authentication with session and token-based strategies.</p>
+
+<pre><code><span class="kw">import</span> { Auth } <span class="kw">from</span> <span class="str">'speexjs/server/auth'</span>
+
+<span class="kw">const</span> auth = <span class="kw">new</span> Auth(db)
+
+<span class="cm">// Login</span>
+<span class="kw">const</span> user = <span class="kw">await</span> auth.attempt(email, password)
+
+<span class="cm">// Current user</span>
+<span class="kw">const</span> current = auth.user()
+
+<span class="cm">// Check authentication</span>
+<span class="kw">if</span> (auth.check()) {
+  <span class="cm">// User is logged in</span>
+}</code></pre>
+
+<h2 id="cache">Cache</h2>
+<pre><code><span class="kw">import</span> { Cache } <span class="kw">from</span> <span class="str">'speexjs/server'</span>
+
+<span class="kw">await</span> Cache.put(<span class="str">'users:all'</span>, users, <span class="num">3600</span>)
+<span class="kw">const</span> cached = <span class="kw">await</span> Cache.get(<span class="str">'users:all'</span>)
+
+<span class="cm">// Remember pattern</span>
+<span class="kw">const</span> data = <span class="kw">await</span> Cache.remember(<span class="str">'key'</span>, <span class="num">60</span>, <span class="fn">async</span> () => {
+  <span class="kw">return await</span> expensiveQuery()
+})</code></pre>
+
+<h2 id="storage">Storage</h2>
+<pre><code><span class="kw">import</span> { createStorage, LocalDisk } <span class="kw">from</span> <span class="str">'speexjs/server'</span>
+
+<span class="kw">const</span> storage = createStorage({
+  disk: <span class="kw">new</span> LocalDisk({ root: <span class="str">'./storage'</span> }),
+})
+
+<span class="kw">await</span> storage.put(<span class="str">'avatars/1.jpg'</span>, buffer)
+<span class="kw">const</span> file = <span class="kw">await</span> storage.get(<span class="str">'avatars/1.jpg'</span>)
+<span class="kw">await</span> storage.delete(<span class="str">'avatars/1.jpg'</span>)
+<span class="kw">const</span> url = storage.url(<span class="str">'avatars/1.jpg'</span>)</code></pre>
+
+<h2 id="events">Events</h2>
+<pre><code><span class="kw">import</span> { Event, event } <span class="kw">from</span> <span class="str">'speexjs/server'</span>
+
+<span class="cm">// Define an event</span>
+<span class="kw">export class</span> UserRegistered <span class="kw">extends</span> Event {
+  <span class="fn">constructor</span>(<span class="kw">public</span> user: User) { <span class="kw">super</span>() }
+}
+
+<span class="cm">// Listen</span>
+event.on(UserRegistered, <span class="fn">async</span> (evt) => {
+  <span class="kw">await</span> sendWelcomeEmail(evt.user)
+})
+
+<span class="cm">// Dispatch</span>
+<span class="kw">await</span> event.dispatch(<span class="kw">new</span> UserRegistered(user))</code></pre>
+
+<h2 id="mail">Mail</h2>
+<pre><code><span class="kw">import</span> { Mailer, SmtpMailTransport } <span class="kw">from</span> <span class="str">'speexjs/server/mail'</span>
+
+<span class="kw">const</span> transport = <span class="kw">new</span> SmtpMailTransport({
+  host: <span class="str">'smtp.example.com'</span>,
+  port: <span class="num">587</span>,
+  auth: { user: <span class="str">'user'</span>, pass: <span class="str">'pass'</span> },
+})
+
+<span class="kw">const</span> mailer = <span class="kw">new</span> Mailer(transport)
+
+<span class="kw">await</span> mailer.send({
+  to: <span class="str">'user@example.com'</span>,
+  subject: <span class="str">'Welcome!'</span>,
+  html: <span class="str">'&lt;h1&gt;Welcome to SpeexJS!&lt;/h1&gt;'</span>,
+})</code></pre>
+
+<h2 id="queues">Queues</h2>
+<p>Queue jobs are processed asynchronously in the background, supporting delayed execution and retries.</p>
+
+<pre><code><span class="kw">import</span> { Queue } <span class="kw">from</span> <span class="str">'speexjs/server/queue'</span>
+
+<span class="kw">const</span> queue = <span class="kw">new</span> Queue()
+
+<span class="cm">// Dispatch a job</span>
+<span class="kw">await</span> queue.push(<span class="str">'send-welcome-email'</span>, { userId: <span class="num">1</span> })
+
+<span class="cm">// Delayed job</span>
+<span class="kw">await</span> queue.push(<span class="str">'send-reminder'</span>, { userId: <span class="num">1</span> }, { delay: <span class="num">3600</span> })</code></pre>
+
+<h2 id="scheduling">Scheduling</h2>
+<pre><code><span class="kw">import</span> { Schedule } <span class="kw">from</span> <span class="str">'speexjs/server/schedule'</span>
+
+<span class="kw">const</span> schedule = <span class="kw">new</span> Schedule()
+
+<span class="cm">// Run a task every minute</span>
+schedule.everyMinute(<span class="fn">async</span> () => {
+  <span class="fn">console</span>.log(<span class="str">'Running scheduled task...'</span>)
+})
+
+<span class="cm">// Daily at midnight</span>
+schedule.daily(<span class="str">'00:00'</span>, <span class="fn">async</span> () => {
+  <span class="kw">await</span> cleanupOldRecords()
+})</code></pre>
+
+<h2 id="websocket">WebSocket</h2>
+<pre><code><span class="kw">import</span> { WebSocketServer } <span class="kw">from</span> <span class="str">'speexjs/server/websocket'</span>
+
+<span class="kw">const</span> wss = <span class="kw">new</span> WebSocketServer()
+wss.attach(httpServer)
+
+wss.on(<span class="str">'connection'</span>, <span class="fn">socket</span> => {
+  socket.send(<span class="str">'Welcome!'</span>)
+  
+  socket.on(<span class="str">'message'</span>, <span class="fn">data</span> => {
+    <span class="fn">console</span>.log(<span class="str">'Received:'</span>, data)
+  })
+})</code></pre>
+
+<h2 id="cli">CLI Reference</h2>
+<table>
+  <tr><th>Command</th><th>Description</th></tr>
+  <tr><td><code>speexjs init &lt;name&gt;</code></td><td>Create a new project</td></tr>
+  <tr><td><code>speexjs serve</code></td><td>Start the development server</td></tr>
+  <tr><td><code>speexjs serve --docs</code></td><td>Serve documentation site</td></tr>
+  <tr><td><code>speexjs make:controller &lt;name&gt;</code></td><td>Generate a controller</td></tr>
+  <tr><td><code>speexjs make:middleware &lt;name&gt;</code></td><td>Generate middleware</td></tr>
+  <tr><td><code>speexjs make:migration &lt;name&gt;</code></td><td>Generate a migration</td></tr>
+  <tr><td><code>speexjs make:model &lt;name&gt;</code></td><td>Generate a model</td></tr>
+  <tr><td><code>speexjs make:schema &lt;name&gt;</code></td><td>Generate a schema</td></tr>
+  <tr><td><code>speexjs migrate</code></td><td>Run pending migrations</td></tr>
+  <tr><td><code>speexjs db:seed</code></td><td>Seed the database</td></tr>
+  <tr><td><code>speexjs list-routes</code></td><td>List all registered routes</td></tr>
+</table>
+
+<h2 id="rpc">RPC</h2>
+<p>The RPC module provides type-safe remote procedure calls between client and server.</p>
+<pre><code><span class="kw">import</span> { RpcServer } <span class="kw">from</span> <span class="str">'speexjs/rpc'</span>
+
+<span class="kw">const</span> rpc = <span class="kw">new</span> RpcServer()
+
+rpc.register(<span class="str">'greet'</span>, <span class="fn">async</span> (name: <span class="kw">string</span>) => {
+  <span class="kw">return</span> <span class="str">`Hello, ${name}!`</span>
+})
+
+<span class="cm">// Client call (auto-generated types):</span>
+<span class="cm">// const result = await rpc.call('greet', 'World')</span></code></pre>
+
+<h2 id="schema">Schema</h2>
+<pre><code><span class="kw">import</span> { schema } <span class="kw">from</span> <span class="str">'speexjs/schema'</span>
+
+<span class="kw">const</span> UserSchema = schema.object({
+  id: schema.number(),
+  name: schema.string().min(<span class="num">2</span>),
+  email: schema.string().email(),
+  role: schema.enum([<span class="str">'admin'</span>, <span class="str">'user'</span>]),
+})
+
+<span class="kw">type</span> User = <span class="kw">typeof</span> UserSchema.infer</code></pre>
+
+<h2 id="api">API Reference</h2>
+<h3>SuperApp</h3>
+<table>
+  <tr><th>Method</th><th>Description</th></tr>
+  <tr><td><code>use(middleware)</code></td><td>Register global middleware</td></tr>
+  <tr><td><code>get(path, handler)</code></td><td>Register GET route</td></tr>
+  <tr><td><code>post(path, handler)</code></td><td>Register POST route</td></tr>
+  <tr><td><code>put(path, handler)</code></td><td>Register PUT route</td></tr>
+  <tr><td><code>patch(path, handler)</code></td><td>Register PATCH route</td></tr>
+  <tr><td><code>delete(path, handler)</code></td><td>Register DELETE route</td></tr>
+  <tr><td><code>group(prefix, callback)</code></td><td>Group routes under a prefix</td></tr>
+  <tr><td><code>resource(name, controller)</code></td><td>Register full resource controller</td></tr>
+  <tr><td><code>apiResource(name, controller)</code></td><td>Register API resource controller</td></tr>
+  <tr><td><code>controller(ctrl)</code></td><td>Register a controller class</td></tr>
+  <tr><td><code>static(path, options)</code></td><td>Serve static files from a directory</td></tr>
+  <tr><td><code>listen(port, callback)</code></td><td>Start the server</td></tr>
+  <tr><td><code>close()</code></td><td>Stop the server</td></tr>
+  <tr><td><code>onError(handler)</code></td><td>Set global error handler</td></tr>
+  <tr><td><code>notFound(handler)</code></td><td>Set 404 handler</td></tr>
+  <tr><td><code>onShutdown(handler)</code></td><td>Register shutdown hook</td></tr>
+</table>
+
+<h3>Router</h3>
+<table>
+  <tr><th>Method</th><th>Description</th></tr>
+  <tr><td><code>get(path, handler)</code></td><td>GET route</td></tr>
+  <tr><td><code>post(path, handler)</code></td><td>POST route</td></tr>
+  <tr><td><code>put(path, handler)</code></td><td>PUT route</td></tr>
+  <tr><td><code>patch(path, handler)</code></td><td>PATCH route</td></tr>
+  <tr><td><code>delete(path, handler)</code></td><td>DELETE route</td></tr>
+  <tr><td><code>group(prefix, callback)</code></td><td>Route group</td></tr>
+  <tr><td><code>resource(name, ctrl)</code></td><td>Resource routes</td></tr>
+  <tr><td><code>apiResource(name, ctrl)</code></td><td>API resource routes</td></tr>
+  <tr><td><code>middleware(mw)</code></td><td>Route-level middleware</td></tr>
+</table>
+
+<h3>Database</h3>
+<table>
+  <tr><th>Method</th><th>Description</th></tr>
+  <tr><td><code>table(name)</code></td><td>Get a query builder for a table</td></tr>
+  <tr><td><code>raw(sql, bindings)</code></td><td>Execute raw SQL</td></tr>
+  <tr><td><code>connection(name)</code></td><td>Switch database connection</td></tr>
+  <tr><td><code>getDriver()</code></td><td>Get current driver name</td></tr>
+  <tr><td><code>getDialect()</code></td><td>Get current dialect instance</td></tr>
+</table>
+
+<h2 id="testing">Testing</h2>
+<p>SpeexJS ships with testing utilities for HTTP requests, database refresh, and in-memory SQLite.</p>
+
+<pre><code><span class="kw">import</span> { describe, it, expect } <span class="kw">from</span> <span class="str">'vitest'</span>
+<span class="kw">import</span> { testRequest } <span class="kw">from</span> <span class="str">'speexjs/server/testing'</span>
+<span class="kw">import</span> { RefreshDatabase } <span class="kw">from</span> <span class="str">'speexjs/server/testing'</span>
+<span class="kw">import</span> { speexjs } <span class="kw">from</span> <span class="str">'speexjs/server'</span>
+
+describe(<span class="str">'Users API'</span>, <span class="fn">()</span> => {
+  <span class="kw">const</span> app = speexjs()
+  <span class="kw">const</span> http = testRequest(app)
+  
+  <span class="kw">const</span> refresh = <span class="kw">new</span> RefreshDatabase()
+  <span class="kw">const</span> db = <span class="kw">await</span> RefreshDatabase.createSqliteMemory()
+  refresh.setConnection(db).tables(<span class="str">'users'</span>)
+
+  beforeEach(<span class="fn">async</span> () => {
+    <span class="kw">await</span> refresh.refresh()
+  })
+
+  it(<span class="str">'lists users'</span>, <span class="fn">async</span> () => {
+    <span class="kw">const</span> res = <span class="kw">await</span> http.get(<span class="str">'/users'</span>)
+    expect(res.status).toBe(<span class="num">200</span>)
+  })
+})</code></pre>
+
+<h2 id="config">Configuration</h2>
+
+<h4>Environment</h4>
+<pre><code><span class="cm"># .env</span>
+PORT=3000
+DB_DRIVER=mysql
+DB_HOST=localhost
+DB_DATABASE=my_app
+APP_KEY=your-secret-key</code></pre>
+
+<h4>TypeScript Configuration</h4>
+<p>Ensure your <code>tsconfig.json</code> includes:</p>
+<pre><code>{
+  <span class="str">"compilerOptions"</span>: {
+    <span class="str">"module"</span>: <span class="str">"ESNext"</span>,
+    <span class="str">"moduleResolution"</span>: <span class="str">"bundler"</span>,
+    <span class="str">"target"</span>: <span class="str">"ESNext"</span>,
+    <span class="str">"experimentalDecorators"</span>: <span class="num">true</span>,
+    <span class="str">"strict"</span>: <span class="num">true</span>
+  }
+}</code></pre>
+
+<hr style="border: none; border-top: 1px solid var(--border); margin: 48px 0 24px;">
+<p style="text-align: center; color: var(--muted); font-size: 13px;">
+  SpeexJS &mdash; MIT License &mdash; Built with TypeScript
+</p>
+</div>
+</body>
+</html>

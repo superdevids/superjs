@@ -87,6 +87,8 @@ export class TestResponse {
   }
 }
 
+export { RefreshDatabase } from './database.js'
+
 export function testRequest(app: SuperApp): TestRequest {
   return new TestRequest(app)
 }
