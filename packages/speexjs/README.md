@@ -94,7 +94,7 @@ export default function Home({ name }: { name?: string }): VNode {
 ## Benchmarks vs Competitors
 
 | | SpeexJS | Hono | Fastify | Express |
-|---|---|---|---|---|---|
+|---|---|---|---|---|
 | Bundle size | **69+ KB** | 50 KB | 1 MB | 2 MB |
 | Dependencies | **Zero** | Zero | 30+ | 40+ |
 | Features | **300+** | 10+ | 15+ | 20+ |
