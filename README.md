@@ -7,7 +7,7 @@ JavaScript/TypeScript Framework & Utility toolkit.
 | Package                         | Description                                                                                          | npm                    |
 | ------------------------------- | ---------------------------------------------------------------------------------------------------- | ---------------------- |
 | [speexkit](./packages/speexkit) | Utility toolkit: NDArray, ML, Stats, validation, functional, date, async. 400+ functions, zero deps. | `npm install speexkit` |
-| [speexjs](./packages/speexjs)   | Web framework for TypeScript                                                                         | (in development)       |
+| [speexjs](./packages/speexjs)   | Web framework for TypeScript                                                                         | `npm install speexjs`  |
 
 ## Lisence
 

@@ -242,8 +242,11 @@ export class SuperApp {
 		});
 	}
 
-	listen(port?: number, callback?: () => void): this {
-		this.serverPromise = this.start(port).then(() => {
+	listen(port?: number, hostOrCallback?: string | (() => void), callback?: () => void): this {
+		const actualPort = port
+		const actualHost = typeof hostOrCallback === 'string' ? hostOrCallback : undefined
+		const actualCallback = typeof hostOrCallback === 'function' ? hostOrCallback : callback
+		this.serverPromise = this.start(actualPort, actualHost).then(() => {
 			const shutdown = async (signal: string) => {
 				if (this.shuttingDown) return;
 				this.shuttingDown = true;
@@ -266,7 +269,7 @@ export class SuperApp {
 				process.stdin.on('end', () => shutdown('stdin end'));
 			}
 
-			callback?.();
+			actualCallback?.();
 		});
 		return this;
 	}

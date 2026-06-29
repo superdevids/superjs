@@ -544,7 +544,7 @@ export async function initProject(name: string, options: Record<string, any>): P
 
   console.log()
   console.log(`${colors.bold('╔════════════════════════════════════╗')}`)
-  console.log(`${colors.bold('║')}        ${colors.green('speexjs 🚀 Project Created')}${colors.bold('       ║')}`)
+  console.log(`${colors.bold('║')}${colors.green('SpeexJS 🚀 Project Created')}${colors.bold('       ║')}`)
   console.log(`${colors.bold('╚════════════════════════════════════╝')}`)
   console.log()
   console.log(`  ${colors.bold('Name:')}     ${toPascalCase(name)}`)
