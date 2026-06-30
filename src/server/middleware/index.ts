@@ -7,6 +7,7 @@ import { HttpStatus } from '../http/status'
 import type { RouteContext } from '../router'
 import type { Schema } from '../../schema/types.js'
 import { RouteRateLimiter } from './route-limiter.js'
+import { AdaptiveRateLimiter, type AdaptiveConfig } from './rate-limiter-store.js'
 
 const MIME_TYPES: Record<string, string> = {
   '.html': 'text/html',
@@ -768,6 +769,44 @@ export function throttleDynamic(getLimit: (ctx: RouteContext) => { max: number; 
   }
 
   middleware.cleanup = () => clearInterval(cleanup)
+  return middleware as Middleware & { cleanup?: () => void }
+}
+
+export function adaptiveThrottle(config?: Partial<AdaptiveConfig>): Middleware & { cleanup?: () => void } {
+  const limiter = new AdaptiveRateLimiter(config)
+
+  const middleware = (ctx: RouteContext, next: () => Promise<void>) => {
+    const forwarded = ctx.request.headers.get('x-forwarded-for')
+    const ip = (forwarded !== undefined ? forwarded.split(',')[0]?.trim() : undefined) || ctx.request.ip
+    const key = ip.startsWith('::ffff:') ? ip.slice(7) : ip
+
+    const conf = limiter.getConfig()
+    limiter.hit(key, conf.defaultWindow, conf.defaultMax).then((result) => {
+      const multiplier = limiter.getMultiplier()
+      ctx.response.header('x-ratelimit-limit', String(conf.defaultMax))
+      ctx.response.header('x-ratelimit-remaining', String(result.remaining))
+      ctx.response.header('x-ratelimit-reset', String(result.resetAt))
+      ctx.response.header('x-ratelimit-multiplier', String(multiplier))
+      ctx.response.header('x-ratelimit-policy', 'adaptive')
+
+      if (result.count > conf.defaultMax * multiplier) {
+        const retryAfter = Math.ceil((result.resetAt - Date.now()) / 1000)
+        ctx.response.header('retry-after', String(retryAfter))
+        ctx.response.status(HttpStatus.TOO_MANY_REQUESTS).json({
+          error: 'Too Many Requests',
+          message: `Rate limit exceeded (adaptive). Try again in ${retryAfter} seconds.`,
+          policy: 'adaptive',
+          multiplier,
+        })
+        return
+      }
+
+      return next()
+    })
+    return
+  }
+
+  middleware.cleanup = () => limiter.close()
   return middleware as Middleware & { cleanup?: () => void }
 }
 

@@ -1,0 +1,111 @@
+{
+  "name": "speexjs-inspector",
+  "displayName": "SpeexJS Inspector",
+  "description": "Route explorer, code generators, and debug tools for SpeexJS framework",
+  "version": "2.1.0",
+  "publisher": "speexjs",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/superdevids/speexjs.git"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Other"
+  ],
+  "keywords": ["speexjs", "fullstack", "typescript", "framework"],
+  "activationEvents": [
+    "onLanguage:typescript",
+    "onCommand:speexjs.showRouteExplorer",
+    "onCommand:speexjs.makeController",
+    "onCommand:speexjs.makeModel",
+    "onCommand:speexjs.makeAuth",
+    "onCommand:speexjs.makeResource"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "speexjs.showRouteExplorer",
+        "title": "SpeexJS: Show Route Explorer"
+      },
+      {
+        "command": "speexjs.makeController",
+        "title": "SpeexJS: Generate Controller"
+      },
+      {
+        "command": "speexjs.makeModel",
+        "title": "SpeexJS: Generate Model"
+      },
+      {
+        "command": "speexjs.makeAuth",
+        "title": "SpeexJS: Generate Auth Scaffold"
+      },
+      {
+        "command": "speexjs.makeResource",
+        "title": "SpeexJS: Generate Resource"
+      },
+      {
+        "command": "speexjs.makeMiddleware",
+        "title": "SpeexJS: Generate Middleware"
+      },
+      {
+        "command": "speexjs.listRoutes",
+        "title": "SpeexJS: List All Routes"
+      },
+      {
+        "command": "speexjs.openDevDashboard",
+        "title": "SpeexJS: Open Dev Dashboard"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "speexjs-sidebar",
+          "title": "SpeexJS",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "speexjs-sidebar": [
+        {
+          "type": "tree",
+          "id": "speexjsRouteExplorer",
+          "name": "Routes"
+        },
+        {
+          "type": "tree",
+          "id": "speexjsQuickActions",
+          "name": "Quick Actions"
+        }
+      ]
+    },
+    "menus": {
+      "editor/context": [
+        {
+          "command": "speexjs.makeController",
+          "group": "speexjs@1"
+        },
+        {
+          "command": "speexjs.makeModel",
+          "group": "speexjs@2"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.7.0"
+  }
+}

@@ -1,4 +1,26 @@
-﻿export class HttpException extends Error {
+﻿// ─── Error Hint Registry ─────────────────────────────────────────
+
+export interface ErrorHint {
+  title: string
+  suggestion: string
+  docsUrl?: string
+}
+
+const errorHints = new Map<string, ErrorHint>()
+
+export function registerErrorHint(exceptionName: string, hint: ErrorHint): void {
+  errorHints.set(exceptionName, hint)
+}
+
+export function getErrorHint(exceptionName: string): ErrorHint | undefined {
+  return errorHints.get(exceptionName)
+}
+
+export function getAllErrorHints(): Map<string, ErrorHint> {
+  return new Map(errorHints)
+}
+
+export class HttpException extends Error {
   public readonly status: number
   public readonly error: string
 
@@ -7,6 +29,10 @@
     this.name = 'HttpException'
     this.status = status
     this.error = error ?? getDefaultErrorName(status)
+  }
+
+  getHint(): ErrorHint | undefined {
+    return errorHints.get(this.name)
   }
 
   toJSON(): Record<string, unknown> {
@@ -145,3 +171,71 @@ export function normalizeError(_err: unknown): HttpException {
 
   return new InternalServerErrorException(err.message)
 }
+
+// ─── Built-in Error Hints ────────────────────────────────────────
+
+registerErrorHint('BadRequestException', {
+  title: 'Bad Request',
+  suggestion: 'The request could not be understood. Check the request body format, headers, and query parameters.',
+  docsUrl: 'https://speexjs.dev/docs/http#bad-request',
+})
+
+registerErrorHint('UnauthorizedException', {
+  title: 'Authentication Required',
+  suggestion: 'Did you forget to add auth middleware? Ensure you are passing a valid token or session cookie. Use `router.use(authMiddleware())` on protected routes.',
+  docsUrl: 'https://speexjs.dev/docs/authentication',
+})
+
+registerErrorHint('ForbiddenException', {
+  title: 'Access Denied',
+  suggestion: 'You do not have permission to access this resource. Check your user roles and permissions configuration.',
+  docsUrl: 'https://speexjs.dev/docs/authorization',
+})
+
+registerErrorHint('NotFoundException', {
+  title: 'Resource Not Found',
+  suggestion: 'The requested resource was not found. Did you register the route? Check your routes file or ensure the URL is correct.',
+  docsUrl: 'https://speexjs.dev/docs/routing',
+})
+
+registerErrorHint('MethodNotAllowedException', {
+  title: 'Method Not Allowed',
+  suggestion: 'This endpoint does not support the HTTP method used. Check the route definition for allowed methods.',
+  docsUrl: 'https://speexjs.dev/docs/routing#methods',
+})
+
+registerErrorHint('ConflictException', {
+  title: 'Resource Conflict',
+  suggestion: 'The request conflicts with the current state. This often happens when creating a duplicate resource or when there are concurrent updates.',
+  docsUrl: 'https://speexjs.dev/docs/http#conflict',
+})
+
+registerErrorHint('UnprocessableEntityException', {
+  title: 'Validation Failed',
+  suggestion: 'The request data failed validation. Check each field against the schema requirements (min, max, type, format).',
+  docsUrl: 'https://speexjs.dev/docs/validation',
+})
+
+registerErrorHint('TooManyRequestsException', {
+  title: 'Rate Limit Exceeded',
+  suggestion: 'You have sent too many requests in a short time. Wait for the rate limit window to reset or reduce request frequency.',
+  docsUrl: 'https://speexjs.dev/docs/rate-limiting',
+})
+
+registerErrorHint('InternalServerErrorException', {
+  title: 'Internal Server Error',
+  suggestion: 'An unexpected error occurred. Check the server logs for details. Enable NODE_ENV=development for more informative error pages.',
+  docsUrl: 'https://speexjs.dev/docs/errors',
+})
+
+registerErrorHint('ServiceUnavailableException', {
+  title: 'Service Unavailable',
+  suggestion: 'The server is temporarily unable to handle the request. This may be due to maintenance or overload. Try again shortly.',
+  docsUrl: 'https://speexjs.dev/docs/errors#service-unavailable',
+})
+
+registerErrorHint('ValidationException', {
+  title: 'Validation Error',
+  suggestion: 'One or more fields failed validation. Check the error details for specific field requirements.',
+  docsUrl: 'https://speexjs.dev/docs/validation',
+})

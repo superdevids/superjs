@@ -548,6 +548,204 @@ async function loadStarterTemplates(): Promise<void> {
   }
 }
 
+// ─── Conversational CLI Wizard ───────────────────────────────────
+
+interface WizardAnswers {
+  name: string
+  template: string
+  features: string[]
+  database: string
+  deploy: string
+  install: boolean
+}
+
+const TEMPLATES_WIZARD = [
+  { id: 'blank', name: 'Blank', desc: 'Minimal HTTP server' },
+  { id: 'fullstack', name: 'Fullstack Web App', desc: 'Server + Client VDOM + Auth + DB + Queue' },
+  { id: 'api-only', name: 'REST API', desc: 'API server with DB, Auth, OpenAPI' },
+  { id: 'saas', name: 'SaaS Application', desc: 'Auth, DB, Queue, Mail, RBAC, Billing-ready' },
+  { id: 'blog', name: 'Blog / CMS', desc: 'Auth, DB, i18n, Static pages' },
+  { id: 'realtime', name: 'Real-time App', desc: 'Auth, DB, WebSocket, Queue, SSE' },
+  { id: 'ecommerce', name: 'E-commerce', desc: 'Auth, DB, Queue, Mail, Payments' },
+  { id: 'minimal', name: 'Minimal', desc: 'HTTP server + Router only' },
+]
+
+const ALL_FEATURES = [
+  { id: 'auth', name: 'Authentication', desc: 'Login, register, password reset, OAuth' },
+  { id: 'db', name: 'Database ORM', desc: 'Models, migrations, query builder' },
+  { id: 'queue', name: 'Queue & Jobs', desc: 'Background job processing' },
+  { id: 'websocket', name: 'WebSocket', desc: 'Real-time bidirectional communication' },
+  { id: 'email', name: 'Email', desc: 'SMTP mail sending with templates' },
+  { id: 'cache', name: 'Cache', desc: 'In-memory and Redis caching' },
+  { id: 'admin', name: 'Admin Panel', desc: 'CRUD admin interface' },
+  { id: 'ai', name: 'AI Features', desc: 'AI agents, NL queries, code generation' },
+]
+
+const DATABASES = [
+  { id: 'mysql', name: 'MySQL', desc: 'Popular relational database' },
+  { id: 'postgresql', name: 'PostgreSQL', desc: 'Advanced relational database' },
+  { id: 'sqlite', name: 'SQLite', desc: 'Embedded file-based database' },
+]
+
+const DEPLOY_TARGETS = [
+  { id: 'node', name: 'Node.js', desc: 'Standard Node.js deployment' },
+  { id: 'docker', name: 'Docker', desc: 'Containerized with Docker' },
+  { id: 'vercel', name: 'Vercel', desc: 'Deploy to Vercel serverless' },
+  { id: 'railway', name: 'Railway', desc: 'Deploy to Railway' },
+  { id: 'flyio', name: 'Fly.io', desc: 'Deploy to Fly.io' },
+]
+
+function createPrompt(question: string): Promise<string> {
+  return new Promise((resolve) => {
+    process.stdout.write(`  ${colors.cyan('?')} ${question}\n  ${colors.dim('→')} `)
+    process.stdin.once('data', (data) => {
+      resolve(data.toString().trim())
+    })
+  })
+}
+
+function createChoicePrompt(question: string, choices: { id: string; name: string; desc: string }[], multi: boolean): Promise<string[]> {
+  return new Promise((resolve) => {
+    console.log(`\n  ${colors.cyan('?')} ${question}`)
+    choices.forEach((c, i) => {
+      console.log(`  ${colors.dim(`${i + 1})`)} ${c.name} ${colors.dim('- ' + c.desc)}`)
+    })
+    console.log()
+    if (multi) {
+      process.stdout.write(`  ${colors.dim('Enter numbers separated by commas (e.g. 1,3,5) or "all" or "none": ')}`)
+    } else {
+      process.stdout.write(`  ${colors.dim(`Enter number (1-${choices.length}): `)}`)
+    }
+
+    process.stdin.once('data', (data) => {
+      const input = data.toString().trim().toLowerCase()
+      if (input === 'all' && multi) {
+        resolve(choices.map(c => c.id))
+        return
+      }
+      if (input === 'none' && multi) {
+        resolve([])
+        return
+      }
+      const parts = input.split(',').map(p => p.trim())
+      const selected = parts.map(p => {
+        const idx = parseInt(p, 10) - 1
+        return idx >= 0 && idx < choices.length ? choices[idx].id : null
+      }).filter(Boolean) as string[]
+      resolve(selected)
+    })
+  })
+}
+
+async function runWizard(args: Record<string, any>): Promise<WizardAnswers> {
+  const name = args._?.[0] || (await createPrompt('Project name:')) || 'my-speexjs-app'
+
+  const templateIds = args.template
+    ? [args.template]
+    : await createChoicePrompt('What are you building?', TEMPLATES_WIZARD, false)
+
+  const defaultFeatures: Record<string, string[]> = {
+    blank: [],
+    minimal: [],
+    'api-only': ['auth', 'db'],
+    fullstack: ['auth', 'db', 'queue'],
+    saas: ['auth', 'db', 'queue', 'email', 'cache'],
+    blog: ['auth', 'db', 'cache'],
+    realtime: ['auth', 'db', 'websocket', 'queue'],
+    ecommerce: ['auth', 'db', 'queue', 'email'],
+  }
+
+  const recommended = defaultFeatures[templateIds[0]!] || []
+
+  console.log(`\n  ${colors.dim(`Recommended features for ${templateIds[0]}: ${recommended.join(', ') || 'none'}`)}`)
+
+  const features = args.features
+    ? args.features.split(',')
+    : await createChoicePrompt(
+        'Which features do you need? (recommended pre-selected)',
+        ALL_FEATURES,
+        true,
+      )
+
+  const finalFeatures = features.length > 0 ? features : recommended
+
+  const dbDialect = args.db
+    ? args.db
+    : finalFeatures.includes('db')
+      ? (await createChoicePrompt('Which database?', DATABASES, false))[0] || 'sqlite'
+      : 'sqlite'
+
+  const deploy = args.deploy
+    ? args.deploy
+    : (await createChoicePrompt('Deployment target?', DEPLOY_TARGETS, false))[0] || 'node'
+
+  const installAnswer = await createPrompt('Install dependencies now? (Y/n)')
+  const install = installAnswer.toLowerCase() !== 'n'
+
+  return {
+    name: name.replace(/[^a-z0-9_-]/gi, '-').toLowerCase(),
+    template: templateIds[0],
+    features: finalFeatures,
+    database: dbDialect,
+    deploy,
+    install,
+  }
+}
+
+function getTemplateContent(templateId: string, answers: WizardAnswers): TemplateContent {
+  const baseDirs = ['src', 'src/routes', 'public']
+  const baseFiles: Record<string, string | ((name: string) => string)> = {}
+
+  const templateAdditions: Record<string, { dirs: string[]; files: Record<string, string | ((name: string) => string)> }> = {
+    fullstack: {
+      dirs: ['src/controllers', 'src/views', 'src/views/layouts'],
+      files: {},
+    },
+    saas: {
+      dirs: ['src/controllers', 'src/jobs', 'src/middleware', 'src/views'],
+      files: {},
+    },
+    'api-only': {
+      dirs: ['src/controllers'],
+      files: {},
+    },
+  }
+
+  const featureAdditions: Record<string, string[]> = {
+    auth: ['src/controllers/Auth', 'src/models', 'src/schemas', 'src/middleware'],
+    db: ['src/models', 'src/database', 'src/database/migrations', 'src/database/seeders'],
+    queue: ['src/jobs'],
+    websocket: ['src/websocket', 'src/websocket/channels'],
+    email: ['src/mail', 'src/mail/templates'],
+    cache: [],
+    admin: ['src/admin'],
+    ai: ['src/ai', 'src/ai/agents', 'src/ai/prompts'],
+  }
+
+  const allDirs = [...baseDirs]
+  const templateExtra = templateAdditions[templateId]
+  if (templateExtra) {
+    allDirs.push(...templateExtra.dirs)
+  }
+  for (const feature of answers.features) {
+    const extraDirs = featureAdditions[feature]
+    if (extraDirs) {
+      allDirs.push(...extraDirs)
+    }
+  }
+
+  const dirs = [...new Set(allDirs)]
+
+  const files: Record<string, string | ((name: string) => string)> = {
+    ...baseFiles,
+  }
+  if (templateExtra) {
+    Object.assign(files, templateExtra.files)
+  }
+
+  return { dirs, files }
+}
+
 export async function initProject(name: string, options: Record<string, any>): Promise<void> {
   const targetDir = resolve(process.cwd(), name)
 
@@ -559,11 +757,13 @@ export async function initProject(name: string, options: Record<string, any>): P
   await loadStarterTemplates()
 
   let templateName: string
+  let wizardAnswers: WizardAnswers | undefined
 
-  if (options.template) {
-    templateName = getTemplate(String(options.template))
+  if (options.wizard || !options.template) {
+    wizardAnswers = await runWizard({ ...options, _: [name] })
+    templateName = getTemplate(wizardAnswers.template)
   } else {
-    templateName = getTemplate(await selectTemplateInteractive())
+    templateName = getTemplate(String(options.template))
   }
 
   const template = TEMPLATES[templateName]
@@ -576,7 +776,15 @@ export async function initProject(name: string, options: Record<string, any>): P
 
   mkdirSync(targetDir, { recursive: true })
 
-  for (const dir of template.dirs) {
+  const allDirs = new Set(template.dirs)
+  if (wizardAnswers) {
+    const wizardContent = getTemplateContent(templateName, wizardAnswers)
+    for (const dir of wizardContent.dirs) {
+      allDirs.add(dir)
+    }
+  }
+
+  for (const dir of allDirs) {
     mkdirSync(resolve(targetDir, dir), { recursive: true })
   }
 
@@ -595,7 +803,8 @@ export async function initProject(name: string, options: Record<string, any>): P
     }
   }
 
-  if (options.install !== false) {
+  const shouldInstall = wizardAnswers ? wizardAnswers.install : (options.install !== false)
+  if (shouldInstall) {
     const pm = String(options['package-manager'] || options.packageManager || 'npm')
     try {
       const { execSync } = await import('child_process')
@@ -616,6 +825,9 @@ export async function initProject(name: string, options: Record<string, any>): P
   console.log(`${colors.bold('╠══════════════════════════════════════════╣')}`)
   console.log(`${colors.bold('║')}  ${colors.dim('Name:')}     ${colors.white(toPascalCase(name))}`)
   console.log(`${colors.bold('║')}  ${colors.dim('Template:')} ${colors.cyan(templateName)}`)
+  if (wizardAnswers?.features.length) {
+    console.log(`${colors.bold('║')}  ${colors.dim('Features:')} ${colors.white(wizardAnswers.features.join(', '))}`)
+  }
   console.log(`${colors.bold('║')}  ${colors.dim('Dir:')}      ${colors.white(targetDir)}`)
   console.log(`${colors.bold('╚══════════════════════════════════════════╝')}`)
   console.log()

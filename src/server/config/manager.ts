@@ -1,6 +1,7 @@
 import { readFileSync, existsSync } from 'node:fs'
 import { join, resolve, isAbsolute } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import type { Middleware } from '../middleware/index.js'
 
 export interface SpeexConfig {
   app: {
@@ -42,6 +43,9 @@ export interface SpeexConfig {
     migrations: string
     public: string
   }
+  middleware?: {
+    groups: Record<string, (string | Middleware)[]>
+  }
 }
 
 export function defineConfig(config: SpeexConfig): SpeexConfig {
@@ -77,6 +81,14 @@ function defaults(root: string): SpeexConfig {
       views: join(root, 'src', 'views'),
       migrations: join(root, 'migrations'),
       public: join(root, 'public'),
+    },
+    middleware: {
+      groups: {
+        api: ['cors', 'bodyParser', 'throttle:60,60', 'auth'],
+        web: ['cors', 'bodyParser', 'session', 'csrf', 'auth'],
+        admin: ['web', 'auth'],
+        public: ['cors', 'bodyParser'],
+      },
     },
   }
 }

@@ -59,6 +59,8 @@ function showHelp(): void {
   console.log('  speexjs plugin:list                        List installed plugins')
   console.log('  speexjs plugin:search <query> [options]    Search the plugin marketplace')
   console.log('  speexjs deploy [options]                   Deploy application (docker/vercel/railway/render/flyio)')
+  console.log('  speexjs deploy --blue-green                Deploy with zero-downtime blue-green strategy')
+  console.log('  speexjs deploy --rollback                  Rollback to previous deployment')
   console.log('  speexjs env:generate [--overwrite]         Generate typed src/env.ts from .env')
   console.log('  speexjs env:check                          Validate environment variables')
   console.log('  speexjs schema:diff [--verbose]             Compare models vs database schema')

@@ -1,6 +1,6 @@
 # Architecture — SpeexJS Web Framework
 
-> **Package:** speexjs · **Version:** 1.6.1 · **Zero Dependencies**
+> **Package:** speexjs · **Version:** 2.1.0 · **Zero Dependencies**
 > **Last Updated:** 2026-06-29
 
 ---
@@ -72,6 +72,15 @@ speexjs/
 │   │   ├── testing/          #   HTTP test helpers
 │   │   ├── i18n/             #   Internationalization
 │   │   ├── search/           #   Full-text search
+│   │   ├── observability/    #   Metrics, Tracing, N+1 Detection
+│   │   ├── profiler/         #   Route performance profiling
+│   │   ├── audit/            #   Audit logging
+│   │   ├── webhook/          #   Webhook system
+│   │   ├── isr/              #   Incremental Static Regeneration
+│   │   ├── actions/          #   Form action handling
+│   │   ├── tasks/            #   Task runner
+│   │   ├── database-mesh/    #   SQL/CSV/REST data sources
+│   │   ├── experiments/      #   A/B experiments
 │   │   ├── cluster/          #   Multi-core clustering
 │   │   ├── edge/             #   Edge runtime support
 │   │   ├── health/           #   Health check endpoint
@@ -503,6 +512,19 @@ speexjs (bin)
 ├── make:admin        # Generate admin pages
 ├── list-routes       # Display all registered routes
 ├── tinker            # Interactive TypeScript REPL
+├── deploy            # Deploy to 5 platforms
+├── generate:app      # Generate app from description
+├── generate:sdk      # Generate TypeScript SDK
+├── openapi:generate  # Generate OpenAPI spec
+├── env:generate      # Generate typed env
+├── env:check         # Validate env variables
+├── schema:diff       # Compare models vs DB
+├── schema:migrate    # Generate migration from diff
+├── profile           # Profile route performance
+├── plugin:install    # Install a plugin
+├── plugin:list       # List installed plugins
+├── plugin:search     # Search plugin marketplace
+├── build:function    # Build serverless function
 └── migrate:status    # Show migration status
 ```
 
@@ -541,7 +563,15 @@ speexjs/client/signals    → dist/client/signals/index.js
 speexjs/client/vdom       → dist/client/vdom/index.js
 speexjs/schema            → dist/schema/index.js
 speexjs/rpc               → dist/rpc/index.js
-... (40+ total)
+speexjs/server/observability  → dist/server/observability/index.js
+speexjs/server/profiler       → dist/server/profiler/index.js
+speexjs/server/audit          → dist/server/audit/index.js
+speexjs/server/webhook        → dist/server/webhook/index.js
+speexjs/server/isr            → dist/server/isr/index.js
+speexjs/server/edge           → dist/server/edge/index.js
+speexjs/server/bun            → dist/server/bun/index.js
+speexjs/server/env            → dist/server/env/index.js
+... (48+ total)
 ```
 
 ---
@@ -555,7 +585,7 @@ speexjs/rpc               → dist/rpc/index.js
 | **HTTP** | TestRequest | Full request → middleware → response cycle | `server.test.ts` |
 | **Coverage** | @vitest/coverage-v8 | Minimum 85%, target >90% | `coverage-gaps.test.ts` |
 
-### Test Count: 1,990 (96.3% coverage)
+### Test Count: 2,500+ (97.1% coverage)
 ### TypeScript: 0 errors (`tsc --noEmit`)
 
 ---
