@@ -599,7 +599,7 @@ async function interactiveWizard(defaultName: string): Promise<{
     console.log(`    ${colors.cyan(t.padEnd(16))} ${colors.dim(desc)}`)
   }
   console.log()
-  const templateAnswer = await ask(`  ${colors.yellow('→')} Template ${colors.dim('[fullstack]'])}: `)
+  const templateAnswer = await ask(`  ${colors.yellow('→')} Template ${colors.dim('[fullstack]')}: `)
   const template = (TEMPLATES.find(t => t.toLowerCase() === templateAnswer.toLowerCase()) || 'fullstack') as Template
 
   console.log(`\n  ${colors.bold('Select features:')} ${colors.dim('(comma-separated, leave empty for none)')}\n`)
@@ -607,7 +607,7 @@ async function interactiveWizard(defaultName: string): Promise<{
     console.log(`    ${colors.cyan(f)}`)
   }
   console.log()
-  const featuresAnswer = await ask(`  ${colors.yellow('→')} Features ${colors.dim('[Auth,Database]'])}: `)
+  const featuresAnswer = await ask(`  ${colors.yellow('→')} Features ${colors.dim('[Auth,Database]')}: `)
   const features = featuresAnswer
     ? featuresAnswer.split(',').map(f => f.trim()).filter(Boolean)
         .filter(f => FEATURES.includes(f as Feature)) as Feature[]
@@ -791,7 +791,7 @@ async function main(): Promise<void> {
   console.log(`    ${colors.cyan('$')} cd ${projectName}`)
   console.log(`    ${colors.cyan('$')} npm run dev`)
   console.log()
-  console.log(`  ${colors.dim('Docs:')} ${colors.underline('https://speexjs.dev/docs')}`)
+  console.log(`  ${colors.dim('Docs:')} ${colors.cyan('https://speexjs.dev/docs')}`)
   console.log()
 }
 

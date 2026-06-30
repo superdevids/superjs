@@ -29,6 +29,11 @@ import { schemaMigrate } from './commands/schema-migrate.js'
 import { buildFunction } from './commands/build-function.js'
 import { profileCommand } from './commands/profile.js'
 import { metricsReport, metricsBundle, metricsQueries, metricsMemory } from './commands/metrics.js'
+import { aiGenerate, aiExplain, aiReview, aiTest, aiFix } from './commands/ai-commands.js'
+import { makeWebhook } from './commands/make-webhook.js'
+import { migrateStatus } from './commands/migrate-status.js'
+import { tinker } from './commands/tinker.js'
+import { generate } from './commands/generate.js'
 
 function showHelp(): void {
   console.log(`${colors.bold('SpeexJS')} ${colors.cyan('v2.0.0')}`)
@@ -83,6 +88,14 @@ function showHelp(): void {
   console.log('  speexjs metrics:bundle                     Bundle size analysis')
   console.log('  speexjs metrics:queries                    Database query performance')
   console.log('  speexjs metrics:memory                     Memory usage profile')
+  console.log('  speexjs ai:generate <desc>                 AI: Generate code from description')
+  console.log('  speexjs ai:explain <file>                  AI: Explain code')
+  console.log('  speexjs ai:review <path>                   AI: Review code (--fix to auto-fix)')
+  console.log('  speexjs ai:test <controller>               AI: Generate tests from controller')
+  console.log('  speexjs ai:fix <cmd> [log]                 AI: Analyze and suggest fixes')
+  console.log('  speexjs tinker                             Interactive REPL')
+  console.log('  speexjs make:webhook <name>                Generate webhook handler')
+  console.log('  speexjs migrate:status                     Show migration status')
   console.log('  speexjs --help                             Show help')
   console.log()
   console.log(`${colors.bold('Aliases:')}`)
@@ -359,6 +372,85 @@ async function main(): Promise<void> {
         method: parsed.options.method as string | undefined,
         warmup: parsed.options.warmup !== false,
       })
+      break
+    }
+
+    // ── PRD06 F10: AI CLI Assistant ──────────────────────────────────────
+    case 'ai':
+    case 'ai:generate': {
+      if (!parsed.args[0]) {
+        console.error(colors.red('Description required'))
+        console.log(`  ${colors.cyan('speexjs ai:generate "create a blog with posts"')}`)
+        process.exit(1)
+      }
+      await aiGenerate({ description: parsed.args.join(' ') || parsed.args[0] })
+      break
+    }
+    case 'ai:explain': {
+      if (!parsed.args[0]) {
+        console.error(colors.red('File path required'))
+        console.log(`  ${colors.cyan('speexjs ai:explain src/controllers/UserController.ts')}`)
+        process.exit(1)
+      }
+      await aiExplain({ file: parsed.args[0] })
+      break
+    }
+    case 'ai:review': {
+      if (!parsed.args[0]) {
+        console.error(colors.red('Path required'))
+        console.log(`  ${colors.cyan('speexjs ai:review src/controllers/')}`)
+        process.exit(1)
+      }
+      await aiReview({
+        path: parsed.args[0],
+        fix: parsed.options.fix === true,
+      })
+      break
+    }
+    case 'ai:test': {
+      if (!parsed.args[0]) {
+        console.error(colors.red('Controller path required'))
+        console.log(`  ${colors.cyan('speexjs ai:test src/controllers/UserController.ts')}`)
+        process.exit(1)
+      }
+      await aiTest({ path: parsed.args[0] })
+      break
+    }
+    case 'ai:fix': {
+      if (!parsed.args[0]) {
+        console.error(colors.red('Command required'))
+        console.log(`  ${colors.cyan('speexjs ai:fix "npm test" [output.log]')}`)
+        process.exit(1)
+      }
+      await aiFix({
+        command: parsed.args[0],
+        logFile: parsed.args[1],
+      })
+      break
+    }
+
+    // ── Other commands ──────────────────────────────────────────────────
+    case 'tinker': {
+      await tinker()
+      break
+    }
+    case 'make:webhook': {
+      if (!parsed.args[0]) {
+        console.error(colors.red('Webhook name required'))
+        console.log(`  ${colors.cyan('speexjs make:webhook <name>')}`)
+        process.exit(1)
+      }
+      await makeWebhook(parsed.args[0])
+      break
+    }
+    case 'migrate:status':
+    case 'migrate-status': {
+      await migrateStatus()
+      break
+    }
+    case 'generate': {
+      // Generic generate command (SSG support)
+      await generate([], parsed.options.outDir as string ?? 'dist')
       break
     }
     case 'metrics': {

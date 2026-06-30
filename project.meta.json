@@ -1,16 +1,26 @@
 {
-  "version": "2.1.1",
+  "version": "2.1.3",
   "releaseDate": "2026-06-30",
   "testCount": 2375,
   "coverage": "97.1",
-  "cliCommands": 44,
-  "cliWired": 42,
-  "subpathExports": 55,
-  "features": 550,
+  "cliCommands": 50,
+  "cliWired": 49,
+  "subpathExports": 56,
+  "features": 555,
   "knownBugs": 0,
   "typescriptErrors": 0,
   "zeroDependencies": true,
   "bundleSize": "218 KB",
   "bundleSizeGzip": "69 KB",
-  "lastUpdated": "2026-06-30"
+  "lastUpdated": "2026-06-30",
+  "prdStatus": {
+    "prd01": "100%",
+    "prd02": "100%",
+    "prd03": "100%",
+    "prd04": "100%",
+    "prd05": "100%",
+    "prd06": "8/10 (F1-F7, F10 implemented)",
+    "prd07": "100%",
+    "prd08": "Partial — CRITICAL items addressed, full pipeline tracking"
+  }
 }

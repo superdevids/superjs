@@ -47,6 +47,13 @@ export type {
   LLMProviderType,
 } from './llm.js'
 export { Moderator } from './moderator.js'
+export { AutonomousLoop } from './autonomous-loop.js'
+export type {
+  AutonomousLoopConfig,
+  AutonomousContext,
+  LoopStep,
+  LoopResult,
+} from './autonomous-loop.js'
 export type {
   ModerationAction,
   PiiType,

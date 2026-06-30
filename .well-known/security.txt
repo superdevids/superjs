@@ -1,0 +1,11 @@
+# Security Policy for SpeexJS
+# https://github.com/superdevids/speexjs
+
+Contact: https://github.com/superdevids/speexjs/security/advisories/new
+Contact: mailto:security@speexjs.dev
+Expires: 2027-06-30T23:59:59.000Z
+Preferred-Languages: en, id
+Encryption: https://keybase.io/superdevids/pgp-key.asc
+Policy: https://github.com/superdevids/speexjs/blob/main/SECURITY.md
+Acknowledgments: https://github.com/superdevids/speexjs/blob/main/SECURITY.md#acknowledgments
+Canonical: https://speexjs.dev/.well-known/security.txt
