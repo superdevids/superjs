@@ -3,6 +3,15 @@ import * as fsp from 'node:fs/promises'
 import * as path from 'node:path'
 import { S3Disk } from './s3.js'
 import type { S3Config } from './s3.js'
+import { FileValidator } from './validation.js'
+import type { FileValidationOptions } from './validation.js'
+import { ImageProcessor } from './image.js'
+import type { ImageProcessingOptions } from './image.js'
+import { SignedUrlGenerator } from './signed-url.js'
+import type { SignedUrlOptions } from './signed-url.js'
+
+export { FileValidator, ImageProcessor, SignedUrlGenerator }
+export type { FileValidationOptions, ImageProcessingOptions, SignedUrlOptions }
 
 export interface Disk {
   put(filePath: string, content: string | Buffer): Promise<string>

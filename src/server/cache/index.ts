@@ -192,6 +192,19 @@ export class Cache {
     this.store.set(fullKey, { value, expiresAt })
   }
 
+  getEntries(): Array<{ key: string; value: unknown; expiresAt: number }> {
+    if (this.config.store === 'file') {
+      return []
+    }
+    const prefix = this.config.prefix
+    const entries: Array<{ key: string; value: unknown; expiresAt: number }> = []
+    for (const [fullKey, entry] of this.store) {
+      const key = fullKey.startsWith(prefix) ? fullKey.slice(prefix.length) : fullKey
+      entries.push({ key, value: entry.value, expiresAt: entry.expiresAt })
+    }
+    return entries
+  }
+
   stats(): { hits: number; misses: number; keys: number; size: string } {
     let keyCount = 0
     let totalSize = 0

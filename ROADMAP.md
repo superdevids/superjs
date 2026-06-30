@@ -2,48 +2,36 @@
 
 > 📋 For the full product roadmap with feature priorities (P0-P4), see [PRD01.md](./docs/PRD01.md).
 
-## ✅ v2.0.0 — Zero Effort Development (Released)
-- Hot Module Replacement (HMR)
-- File-Based Routing
-- Auto-API from ORM Models
-- One-Command Deploy (5 platforms)
-- Admin Panel Generator
-- AI Agent Generator + NL Queries
-- Audit Logging + Webhooks
-- Multi-Tenant + ISR/SSG
-- OpenAPI 3.1 + SDK Generator
-- Plugin Management + Presets
-- 500+ features, 2,500+ tests
+## ✅ v3.0.0 — Developer Maturity (Current — Released 2026-06-30)
+- PRD-01: DevTools Dashboard (`/_speex/devtools`)
+- PRD-02: True HMR 2.0 (Selective Reload)
+- PRD-03: CLI Gen 2 — Better Generators (schema CRUD, test gen, relations)
+- PRD-04: Query Builder 2.0 (typed raw, streaming, analysis, batch)
+- PRD-05: Auth 2.0 — SSO/SAML2/OIDC/Magic Link/WebAuthn
+- PRD-06: Queue 2.0 (delayed, chaining, cron, DLQ)
+- PRD-07: Storage 2.0 (validation, image processing, signed URLs)
+- PRD-08: Full-Text Search Engine (TF-IDF, fuzzy, highlight)
+- PRD-09: Performance & Bundle Analyzer
+- PRD-10: API Versioning & SDK Evolution (deprecation, SDK diff, OpenAPI 3.1)
+- 550+ features, 35+ CLI commands, 55+ subpath exports
+- ALL 5 PRDs 100% aligned ✅
 
-## ✅ v2.1.0 — Production Hardening (Current)
-- @speex/create — Zero-install bootstrap
-- Conversational CLI with feature selection
-- Named Middleware Groups
-- Smart Error Hints with dev suggestions
-- Adaptive Rate Limiting
-- Zero-Downtime Blue-Green Deploy
-- Job Scheduler Management UI
-- VS Code Extension (SpeexJS Inspector)
-- Plugin Marketplace Search
-- All 8 PRD gaps closed
-
-## 🔜 v3.0 — Enterprise (Q1 2027)
-- DevTools Dashboard (unified)
-- True HMR 2.0 (module-level)
-- CLI Gen 2 — Better Generators
-- Query Builder 2.0
-- Auth 2.0 — SSO/SAML/OIDC/Passkeys
-- Queue 2.0 — Delayed jobs, chaining
-- Full documentation site at speexjs.dev
-
-## 🔮 v3.x — AI-Native (Q2 2027)
-- Prompt Management
-- Embedding Providers
+## 🔜 v3.x — AI-Native (Q2 2027)
+- Prompt Management with versioning
+- Embedding Providers (OpenAI, Anthropic, Cohere, Ollama)
+- LLM Provider SDK (unified API)
 - Semantic Caching
 - AI-Powered Admin Panel
+- Content Moderation
 
-## 🔮 v4.0 — Ecosystem (Q3 2027)
-- Plugin Marketplace
-- VS Code Extension v2
-- Official Starters
-- Deploy to All Major Clouds
+## 🔜 v4.0 — Ecosystem (Q3 2027)
+- Plugin Marketplace with 100+ plugins
+- Official Starters (6+)
+- Deploy to All Major Clouds (8+)
+- Mobile SDK (React Native / Flutter)
+
+## 🔜 v5.0 — Ultra-Productive (2028)
+- AI-Powered Code Generation
+- Instant HMR (< 200ms)
+- Type-Driven Development
+- Cross-Runtime Compatibility

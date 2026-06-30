@@ -13,6 +13,7 @@ import { makeModel } from './commands/make-model.js'
 import { makeCrud } from './commands/make-crud.js'
 import { makeResource } from './commands/make-resource.js'
 import { makeSchema } from './commands/make-schema.js'
+import { makeTest } from './commands/make-test.js'
 import { makeAgent } from './commands/make-agent.js'
 import { makeFlag } from './commands/make-flag.js'
 import { generateApp } from './commands/generate-app.js'
@@ -26,6 +27,7 @@ import { schemaDiff } from './commands/schema-diff.js'
 import { schemaMigrate } from './commands/schema-migrate.js'
 import { buildFunction } from './commands/build-function.js'
 import { profileCommand } from './commands/profile.js'
+import { metricsReport, metricsBundle, metricsQueries, metricsMemory } from './commands/metrics.js'
 
 function showHelp(): void {
   console.log(`${colors.bold('SpeexJS')} ${colors.cyan('v2.0.0')}`)
@@ -42,9 +44,17 @@ function showHelp(): void {
   console.log('  speexjs make:migration <name>              Generate migration')
   console.log('  speexjs make:model <name>                  Generate model')
   console.log('  speexjs make:auth [options]                Generate auth scaffold')
+  console.log('  speexjs make:auth --guard <type>           Guard: session|token|sanctum|all (default: session)')
+  console.log('  speexjs make:auth --oauth <providers>      OAuth providers: google,github,discord')
+  console.log('  speexjs make:auth --2fa                    Include TOTP/2FA scaffold')
+  console.log('  speexjs make:auth --verify-email           Include email verification')
+  console.log('  speexjs make:auth --reset-password         Include password reset')
+  console.log('  speexjs make:auth --admin                  Include admin user management')
   console.log('  speexjs make:resource <name>               Generate resource (controller + model + migration)')
+  console.log('  speexjs make:resource <name> --schema <s>  Generate from schema (with validation, tests)')
   console.log('  speexjs make:schema <name>                 Generate schema')
   console.log('  speexjs make:crud                          Generate complete CRUD (interactive)')
+  console.log('  speexjs make:test <controller>             Generate Vitest test cases from controller')
   console.log('  speexjs make:agent <name>                  Generate AI agent')
   console.log('  speexjs make:flag <name>                   Generate feature flag')
   console.log('  speexjs make:admin <name> [fields...]       Generate admin config')
@@ -67,6 +77,10 @@ function showHelp(): void {
   console.log('  speexjs schema:migrate [--dry-run]          Generate migration from schema diff')
   console.log('  speexjs profile [options]                  Profile route performance')
   console.log('  speexjs profile --route "GET /users"       Profile a specific route')
+  console.log('  speexjs metrics:report --routes            Route latency report')
+  console.log('  speexjs metrics:bundle                     Bundle size analysis')
+  console.log('  speexjs metrics:queries                    Database query performance')
+  console.log('  speexjs metrics:memory                     Memory usage profile')
   console.log('  speexjs --help                             Show help')
   console.log()
   console.log(`${colors.bold('Aliases:')}`)
@@ -138,18 +152,34 @@ async function main(): Promise<void> {
     case 'make:resource': {
       if (!parsed.args[0]) {
         console.error(colors.red('Resource name required'))
-        console.log(`  ${colors.cyan('speexjs make:resource <name>')}`)
+        console.log(`  ${colors.cyan('speexjs make:resource <name> [--schema <SchemaName>]')}`)
         process.exit(1)
       }
-      await makeResource(parsed.args[0])
+      await makeResource(parsed.args[0], parsed.options.schema as string | undefined)
       break
     }
     case 'make:auth': {
+      const rawOauth = parsed.options.oauth
+      const oauthProviders = typeof rawOauth === 'string' ? rawOauth.split(',').map((s: string) => s.trim()).filter(Boolean) : []
       await makeAuth({
-        guard: (parsed.options.guard as 'session' | 'token' | 'sanctum') || 'session',
+        guard: (parsed.options.guard as 'session' | 'token' | 'sanctum' | 'all') || 'session',
         views: parsed.options['no-views'] !== true,
         api: parsed.options.api === true,
+        oauth: oauthProviders,
+        twoFactor: parsed.options['2fa'] === true,
+        verifyEmail: parsed.options['verify-email'] === true,
+        resetPassword: parsed.options['reset-password'] !== false,
+        admin: parsed.options.admin === true,
       })
+      break
+    }
+    case 'make:test': {
+      if (!parsed.args[0]) {
+        console.error(colors.red('Controller name required'))
+        console.log(`  ${colors.cyan('speexjs make:test <ControllerName>')}`)
+        process.exit(1)
+      }
+      makeTest(parsed.args[0])
       break
     }
     case 'generate:sdk': {
@@ -325,6 +355,17 @@ async function main(): Promise<void> {
       })
       break
     }
+    case 'metrics': {
+      const subcommand = parsed.args[0]
+      switch (subcommand) {
+        case 'report': await metricsReport(parsed.options); break
+        case 'bundle': await metricsBundle(); break
+        case 'queries': await metricsQueries(); break
+        case 'memory': await metricsMemory(); break
+        default: showMetricsHelp()
+      }
+      break
+    }
     case 'help':
     case '--help':
     case '-h': {
@@ -346,6 +387,13 @@ async function main(): Promise<void> {
       if (command) process.exit(1)
     }
   }
+}
+
+function showMetricsHelp(): void {
+  console.log('  speexjs metrics:report --routes    Route latency report')
+  console.log('  speexjs metrics:bundle             Bundle size analysis')
+  console.log('  speexjs metrics:queries            Database query performance')
+  console.log('  speexjs metrics:memory             Memory usage profile')
 }
 
 async function runBenchmarks(): Promise<void> {

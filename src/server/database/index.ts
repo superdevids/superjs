@@ -21,6 +21,14 @@ export type { PaginationUrl } from './pagination.js'
 export { Pagination } from './pagination.js'
 export type { PaginatedResult } from './query.js'
 export { QueryBuilder } from './query.js'
+export type { BatchOptions, QueryAnalysis } from './query-v2.js'
+export {
+  rawQuery,
+  streamQuery,
+  analyzeQuery,
+  batchInsert,
+  batchUpdate,
+} from './query-v2.js'
 export type { SeederClass } from './seeder.js'
 export { Seeder } from './seeder.js'
 export { Model, type RelationType } from './model.js'

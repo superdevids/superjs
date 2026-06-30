@@ -20,6 +20,7 @@ export {
 import type { ControllerClass } from './router'
 import { type RouteContext, type RouteHandler, Router } from './router'
 import type { ViewEngine } from './view/index.js'
+import { DevToolsDashboard } from './devtools/dashboard.js'
 import { generateDashboardHtml, trackQuery, getRecentQueries } from './debug/dashboard.js'
 
 import { DatabaseConnection } from './database/connection.js'
@@ -71,6 +72,7 @@ export { Controller, controller, get, post, put, del } from './controller'
 export { patch as patchDecorator } from './controller'
 export { SmartErrorHandler } from './errors/handler.js'
 export type { ErrorHint } from './errors/handler.js'
+export { DevToolsDashboard } from './devtools/dashboard.js'
 export { generateDashboardHtml, trackQuery, getRecentQueries, clearQueries, wrapConnection } from './debug/dashboard.js'
 export { Audit, auditMiddleware } from './audit/index.js'
 export { Webhook } from './webhook/index.js'
@@ -313,7 +315,12 @@ export class SuperApp {
   }
 
   private setupDebugMode(): void {
-    if (process.env.SPEEXJS_DEBUG !== 'true') return
+    const isDev = process.env.SPEEXJS_DEBUG === 'true' || process.env.NODE_ENV === 'development'
+
+    const devTools = new DevToolsDashboard(this)
+    devTools.enable()
+
+    if (!isDev) return
 
     this.router.get('/_speexjs/dashboard', async (ctx) => {
       const routes = this.router.getRoutes().map((r) => ({

@@ -6,6 +6,10 @@ interface RouteInfo {
   path: string
   handler?: Function
   middleware?: any[]
+  deprecated?: boolean
+  deprecationMessage?: string
+  sunset?: string
+  migration?: string
 }
 
 interface ServerObject {
@@ -120,7 +124,10 @@ function schemaToJsonSchema(schema?: Schema<unknown>): Record<string, unknown> |
     if (name === 'DateSchema') return { type: 'string', format: 'date-time' }
     if (name === 'LiteralSchema') {
       const anySchemaAny = anySchema as any
-      return { type: typeof anySchemaAny.expected, enum: [anySchemaAny.expected] }
+      const type = typeof anySchemaAny.expected
+      if (anySchemaAny.expected === null) return { enum: [null] }
+      if (type === 'undefined') return {}
+      return { type, enum: [anySchemaAny.expected] }
     }
     if (name === 'AnySchema' || name === 'UnknownSchema') return {}
     if (name === 'NullableSchema') {
@@ -131,8 +138,69 @@ function schemaToJsonSchema(schema?: Schema<unknown>): Record<string, unknown> |
       const base = schemaToJsonSchema((anySchema as any).inner)
       return base ?? {}
     }
+    if (name === 'DefaultSchema') {
+      const base = schemaToJsonSchema((anySchema as any).inner)
+      if (base) {
+        return { ...base, default: anySchema.defaultValue }
+      }
+      return { default: anySchema.defaultValue }
+    }
+    if (name === 'UnionSchema') {
+      return schemaToOpenApi(anySchema)
+    }
+    if (name === 'DiscriminatedUnionSchema') {
+      return schemaToOpenApi(anySchema)
+    }
+    if (name === 'IntersectionSchema') {
+      return schemaToOpenApi(anySchema)
+    }
   }
   return undefined
+}
+
+function schemaToOpenApi(schema: any): Record<string, any> {
+  if (schema._type === 'union' || schema._type === 'discriminatedUnion') {
+    return {
+      oneOf: (schema._options || []).map((opt: any) => schemaToJsonSchema(opt)),
+      discriminator: schema._discriminator ? {
+        propertyName: schema._discriminator,
+        mapping: schema._mapping || {},
+      } : undefined,
+    }
+  }
+
+  const name = schema.constructor?.name
+
+  if (name === 'UnionSchema') {
+    const items = (schema.schemas || []).map((s: any) => schemaToJsonSchema(s)).filter(Boolean)
+    return items.length > 0 ? { oneOf: items } : {}
+  }
+
+  if (name === 'DiscriminatedUnionSchema') {
+    const mapEntries = Object.entries(schema.schemasMap || {}) as [string, any][]
+    const oneOf = mapEntries.map(([, s]) => schemaToJsonSchema(s)).filter(Boolean)
+    const result: Record<string, any> = oneOf.length > 0 ? { oneOf } : {}
+    if (schema.key) {
+      result.discriminator = {
+        propertyName: schema.key,
+        mapping: Object.fromEntries(
+          mapEntries.map(([k]) => [k, `#/components/schemas/${k}`]),
+        ),
+      }
+    }
+    return result
+  }
+
+  if (name === 'IntersectionSchema') {
+    const schemas = [schema.left, schema.right].map((s: any) => schemaToJsonSchema(s)).filter(Boolean)
+    return schemas.length > 0 ? { allOf: schemas } : {}
+  }
+
+  if (name === 'DefaultSchema') {
+    return schemaToJsonSchema(schema.inner) ?? {}
+  }
+
+  return schemaToJsonSchema(schema) ?? {}
 }
 
 function extractExampleFromSchema(schema?: Schema<unknown>): unknown {
@@ -209,10 +277,26 @@ export function generateOpenApiSpec(router: Router, config: OpenApiConfig = {}):
         }
       }
 
+      const deprecationParts: string[] = []
+      if (route.deprecated) {
+        deprecationParts.push('This endpoint is deprecated.')
+      }
+      if (route.sunset) {
+        deprecationParts.push(`Sunset date: ${route.sunset}.`)
+      }
+      if (route.migration) {
+        deprecationParts.push(`Migration path: ${route.migration}.`)
+      }
+      if (route.deprecationMessage) {
+        deprecationParts.push(route.deprecationMessage)
+      }
+      const deprecationSuffix = deprecationParts.length > 0 ? `\n\n> **Deprecation Notice**\n> ${deprecationParts.join(' ')}` : ''
+
       const operation: Record<string, unknown> = {
         summary: metadata.summary ?? `Route ${method} ${route.path}`,
-        description: metadata.description ?? '',
+        description: (metadata.description ?? '') + deprecationSuffix,
         operationId: metadata.operationId ?? `${m}${route.path.replace(/[^a-zA-Z0-9]/g, '_')}`,
+        deprecated: route.deprecated ? true : undefined,
         parameters: parameters.length > 0 ? parameters : undefined,
         responses: {
           '200': {

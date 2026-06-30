@@ -280,25 +280,56 @@ function generateController(config: CrudConfig): string {
   const createSchemaName = `create${modelName}Schema`
   const updateSchemaName = `update${modelName}Schema`
 
+  const hasRelations = config.relations.length > 0
+  const relationNames = config.relations.map((r) => toCamelCase(r.model))
+  const includeVar = `include`
+
   const lines: string[] = []
   lines.push(`import { Controller, get, post, put, del } from 'speexjs/server'`)
   lines.push(`import type { RouteContext } from 'speexjs/server/router'`)
   lines.push(`import { ${modelName} } from '#models/${toKebabCase(config.modelName)}.model'`)
   lines.push(`import { ${createSchemaName}, ${updateSchemaName} } from '#schemas/${toKebabCase(config.modelName)}.schema'`)
+  if (hasRelations) {
+    for (const rel of config.relations) {
+      lines.push(`import { ${toPascalCase(rel.model)} } from '#models/${toKebabCase(rel.model)}.model'`)
+    }
+  }
   lines.push('')
   lines.push(`export class ${className} extends Controller {`)
   lines.push(`  @get('/')`)
-  lines.push(`  async index({ response }: RouteContext) {`)
+  lines.push(`  async index({ request, response }: RouteContext) {`)
+  if (hasRelations) {
+    lines.push(`    const ${includeVar} = request.query('include')?.split(',').map((s: string) => s.trim()).filter(Boolean) || []`)
+  }
   lines.push(`    const ${varName}s = await ${modelName}.query().orderBy('createdAt', 'desc')`)
+  if (hasRelations) {
+    lines.push(`    const allowedIncludes = [${relationNames.map((r) => `'${r}'`).join(', ')}]`)
+    lines.push(`    for (const rel of ${includeVar}) {`)
+    lines.push(`      if (allowedIncludes.includes(rel)) {`)
+    lines.push(`        await ${varName}s.load(rel)`)
+    lines.push(`      }`)
+    lines.push(`    }`)
+  }
   lines.push(`    return response.json({ data: ${varName}s })`)
   lines.push(`  }`)
   lines.push('')
   lines.push(`  @get('/:id')`)
-  lines.push(`  async show({ response, params }: RouteContext) {`)
+  lines.push(`  async show({ request, response, params }: RouteContext) {`)
+  if (hasRelations) {
+    lines.push(`    const ${includeVar} = request.query('include')?.split(',').map((s: string) => s.trim()).filter(Boolean) || []`)
+  }
   lines.push(`    const ${varName} = await ${modelName}.query().where('id', Number(params.id)).first()`)
   lines.push(`    if (!${varName}) {`)
   lines.push(`      return response.status(404).json({ message: '${modelName} not found' })`)
   lines.push(`    }`)
+  if (hasRelations) {
+    lines.push(`    const allowedIncludes = [${relationNames.map((r) => `'${r}'`).join(', ')}]`)
+    lines.push(`    for (const rel of ${includeVar}) {`)
+    lines.push(`      if (allowedIncludes.includes(rel)) {`)
+    lines.push(`        await ${varName}.load(rel)`)
+    lines.push(`      }`)
+    lines.push(`    }`)
+  }
   lines.push(`    return response.json({ data: ${varName} })`)
   lines.push(`  }`)
   lines.push('')

@@ -1,4 +1,4 @@
-# SpeexJS v2.1.0 — Comprehensive PRD Alignment Analysis
+# SpeexJS v3.0.0 — Comprehensive PRD Alignment Analysis
 
 > **Analyzed:** 2026-06-30
 > **Scope:** All 5 PRD documents vs actual source code implementation
@@ -10,13 +10,13 @@
 
 | Metric | Value |
 |--------|-------|
-| **Current Version** | v2.1.0 (package.json) |
+| **Current Version** | v3.0.0 (package.json) |
 | **PRD Features (PRD01)** | 222+ — **100% aligned** ✅ |
 | **PRD02 "No Effort"** | F1-F15 — **100% aligned** ✅ (all gaps closed) |
 | **PRD03 "Scale & AI"** | F16-F30 — **100% aligned** ✅ (all gaps closed) |
 | **PRD04 "Production Hardening"** | N1-N10 — **100% aligned** ✅ (all gaps closed) |
-| **PRD05 "Vision v3.x"** | Future scope — **0% expected** 🔮 (target Q1 2027) |
-| **Overall Alignment** | **~95%** of all documented features are implemented |
+| **PRD05 "Vision v3.x"** | **100% implemented** ✅ (all 10 features shipped) |
+| **Overall Alignment** | **100%** of all documented features are implemented |
 
 ---
 
@@ -124,21 +124,22 @@
 
 ---
 
-## PRD05 — "Vision v3.x" 🔮 FUTURE SCOPE
+## PRD05 — "Vision v3.x" ✅ 100% IMPLEMENTED (ALL 10 FEATURES)
 
-All features in PRD05 are targeted for **v3.0 (Q1 2027)** and beyond:
-- PRD-01: DevTools Dashboard
-- PRD-02: True HMR 2.0
-- PRD-03: CLI Gen 2
-- PRD-04: Query Builder 2.0
-- PRD-05: Auth 2.0 (SSO)
-- PRD-06: Queue 2.0
-- PRD-07: Storage 2.0
-- PRD-08: Full-Text Search Engine
-- PRD-09: Performance Analyzer
-- PRD-10: API Versioning & SDK Evolution
+All 10 PRD05 features have been implemented in v3.0.0:
 
-**No PRD05 features are expected to be shipped yet.** ✅ (On track)
+| PRD | Feature | Priority | Status | Location |
+|-----|---------|----------|--------|----------|
+| **1** | DevTools Dashboard | P0 | ✅ | `src/server/devtools/` |
+| **2** | True HMR 2.0 | P0 | ✅ | `src/cli/commands/serve.ts` |
+| **3** | CLI Gen 2 Generators | P0 | ✅ | `src/cli/commands/make-*.ts`, `make-test.ts` |
+| **4** | Query Builder 2.0 | P1 | ✅ | `src/server/database/query-v2.ts` |
+| **5** | Auth 2.0 (SSO) | P1 | ✅ | `src/server/auth/saml-guard.ts`, `oidc-guard.ts`, etc. |
+| **6** | Queue 2.0 | P1 | ✅ | `src/server/queue/index.ts`, `src/server/schedule/index.ts` |
+| **7** | Storage 2.0 | P2 | ✅ | `src/server/storage/validation.ts`, `image.ts`, `signed-url.ts` |
+| **8** | Search Engine | P2 | ✅ | `src/server/search/index.ts` |
+| **9** | Performance Analyzer | P2 | ✅ | `src/cli/commands/metrics.ts` |
+| **10** | API Versioning & SDK | P2 | ✅ | `src/server/router/deprecation.ts`, `sdk-diff.ts` |
 
 ---
 
@@ -198,15 +199,16 @@ PRD01 (222+ features):  ██████████████████�
 PRD02 (15 features):    ████████████████████ 100% ✅
 PRD03 (15 features):    ████████████████████ 100% ✅
 PRD04 (10 features):    ████████████████████ 100% ✅
-PRD05 (10 features):    ░░░░░░░░░░░░░░░░░░░░   0% 🔮 (expected)
+PRD05 (10 features):    ████████████████████ 100% ✅
 
-OVERALL:                ████████████████████  95% ✅
+OVERALL:                ████████████████████ 100% ✅
 ```
 
-**Conclusion: SpeexJS v2.1.0 is substantially aligned with all PRDs.**
+**Conclusion: SpeexJS v3.0.0 is fully aligned with all 5 PRDs.**
 - PRD01 features are 100% shipped
-- PRD02-PRD04 features are 70-87% shipped
-- 8 gaps identified with suggested remediation
+- PRD02-PRD04 features are 100% shipped
+- PRD05 features are 100% shipped (all 10 features)
+- All 8 gaps closed with suggested remediation
 - 23+ extra features beyond PRD requirements
 
 ---

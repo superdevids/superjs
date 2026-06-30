@@ -22,40 +22,68 @@ class MapStore implements LockoutStore {
   }
 }
 
+export interface LockoutConfig {
+  maxAttempts?: number
+  lockoutDurationMs?: number
+  backoffEnabled?: boolean
+  global?: boolean
+  store?: LockoutStore
+}
+
 export class AccountLockout {
   private attempts: LockoutStore
   private maxAttempts = 5
   private lockoutDuration = 900000
+  private backoffEnabled = true
+  private global = false
 
-  constructor(config?: { maxAttempts?: number; lockoutDurationMs?: number; store?: LockoutStore }) {
+  constructor(config?: LockoutConfig) {
     this.attempts = config?.store ?? new MapStore()
-    if (config?.maxAttempts) this.maxAttempts = config.maxAttempts
-    if (config?.lockoutDurationMs) this.lockoutDuration = config.lockoutDurationMs
+    if (config?.maxAttempts !== undefined) this.maxAttempts = config.maxAttempts
+    if (config?.lockoutDurationMs !== undefined) this.lockoutDuration = config.lockoutDurationMs
+    if (config?.backoffEnabled !== undefined) this.backoffEnabled = config.backoffEnabled
+    if (config?.global !== undefined) this.global = config.global
   }
 
   recordAttempt(identifier: string): void {
-    const entry = this.attempts.get(identifier) ?? { count: 0, lockedUntil: 0 }
+    const key = this.global ? '__global__' : identifier
+    const entry = this.attempts.get(key) ?? { count: 0, lockedUntil: 0 }
     entry.count++
-    if (entry.count >= this.maxAttempts) entry.lockedUntil = Date.now() + this.lockoutDuration
-    this.attempts.set(identifier, entry)
+    if (entry.count >= this.maxAttempts) {
+      const duration = this.backoffEnabled
+        ? this.lockoutDuration * Math.pow(2, entry.count - this.maxAttempts)
+        : this.lockoutDuration
+      entry.lockedUntil = Date.now() + duration
+    }
+    this.attempts.set(key, entry)
   }
 
   isLocked(identifier: string): boolean {
-    const entry = this.attempts.get(identifier)
+    const key = this.global ? '__global__' : identifier
+    const entry = this.attempts.get(key)
     if (!entry) return false
     if (entry.lockedUntil < Date.now()) {
-      this.attempts.delete(identifier)
+      this.attempts.delete(key)
       return false
     }
     return true
   }
 
   clear(identifier: string): void {
-    this.attempts.delete(identifier)
+    const key = this.global ? '__global__' : identifier
+    this.attempts.delete(key)
   }
 
   remainingAttempts(identifier: string): number {
-    const entry = this.attempts.get(identifier)
+    const key = this.global ? '__global__' : identifier
+    const entry = this.attempts.get(key)
     return entry ? Math.max(0, this.maxAttempts - entry.count) : this.maxAttempts
+  }
+
+  getBackoffMultiplier(identifier: string): number {
+    const key = this.global ? '__global__' : identifier
+    const entry = this.attempts.get(key)
+    if (!entry || entry.count < this.maxAttempts) return 1
+    return Math.pow(2, entry.count - this.maxAttempts)
   }
 }

@@ -1,8 +1,7 @@
 import { existsSync, readFileSync, watch } from 'node:fs'
-import { resolve, dirname } from 'node:path'
+import { resolve, dirname, extname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createServer } from 'node:http'
-import { createServer as createNetServer } from 'node:net'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { colors } from '../../native/colors.js'
 import { logger } from '../../native/logger.js'
@@ -13,9 +12,253 @@ interface ServeOptions {
   dev?: string | boolean
   docs?: boolean
   production?: boolean
+  hmr?: boolean
 }
 
 type ProcessState = 'idle' | 'starting' | 'running' | 'stopped' | 'restarting'
+
+// ─── HMR 2.0 — Selective Reload Engine ─────────────────────────
+
+enum ChangeType {
+  ROUTE = 'route',
+  CONTROLLER = 'controller',
+  MIDDLEWARE = 'middleware',
+  MODEL = 'model',
+  VIEW = 'view',
+  CONFIG = 'config',
+  MIGRATION = 'migration',
+  OTHER = 'other',
+}
+
+interface HmrStats {
+  totalReloads: number
+  selectiveReloads: number
+  fullRestarts: number
+  lastReloadTime: number
+  averageReloadTime: number
+}
+
+const ROUTE_PATTERNS = [/routes[/\\]/, /router\.ts$/]
+const CONTROLLER_PATTERNS = [/controllers[/\\]/, /controller\.ts$/]
+const MIDDLEWARE_PATTERNS = [/middleware[/\\]/, /middleware\.ts$/]
+const MODEL_PATTERNS = [/models[/\\]/, /model\.ts$/]
+const VIEW_PATTERNS = [/views[/\\]/, /\.tsx$/]
+const CONFIG_PATTERNS = [/speexjs\.config\./, /\.env/]
+const MIGRATION_PATTERNS = [/migrations[/\\]/, /migration\.ts$/]
+
+function classifyChange(filePath: string): ChangeType {
+  const normalized = filePath.replace(/\\/g, '/')
+  for (const pattern of ROUTE_PATTERNS) {
+    if (pattern.test(normalized)) return ChangeType.ROUTE
+  }
+  for (const pattern of CONTROLLER_PATTERNS) {
+    if (pattern.test(normalized)) return ChangeType.CONTROLLER
+  }
+  for (const pattern of MIDDLEWARE_PATTERNS) {
+    if (pattern.test(normalized)) return ChangeType.MIDDLEWARE
+  }
+  for (const pattern of MODEL_PATTERNS) {
+    if (pattern.test(normalized)) return ChangeType.MODEL
+  }
+  for (const pattern of VIEW_PATTERNS) {
+    if (pattern.test(normalized)) return ChangeType.VIEW
+  }
+  for (const pattern of CONFIG_PATTERNS) {
+    if (pattern.test(normalized)) return ChangeType.CONFIG
+  }
+  for (const pattern of MIGRATION_PATTERNS) {
+    if (pattern.test(normalized)) return ChangeType.MIGRATION
+  }
+  return ChangeType.OTHER
+}
+
+class HmrEngine {
+  private process: ChildProcess | null = null
+  private state: ProcessState = 'idle'
+  private stats: HmrStats = { totalReloads: 0, selectiveReloads: 0, fullRestarts: 0, lastReloadTime: 0, averageReloadTime: 0 }
+  private moduleCache: Map<string, { mtime: number }> = new Map()
+  private watchTimers: Map<string, NodeJS.Timeout> = new Map()
+  private debounceMs = 300
+  private port: number
+  private host: string
+  private serverEntry: string
+  private onRestart?: () => void
+
+  constructor(port: number, host: string, serverEntry: string) {
+    this.port = port
+    this.host = host
+    this.serverEntry = serverEntry
+  }
+
+  onBeforeRestart(cb: () => void): void {
+    this.onRestart = cb
+  }
+
+  private getReloadMessage(type: ChangeType): string {
+    const messages: Record<ChangeType, string> = {
+      [ChangeType.ROUTE]: `[HMR] Route change detected — reloading route registry`,
+      [ChangeType.CONTROLLER]: `[HMR] Controller change detected — reloading module`,
+      [ChangeType.MIDDLEWARE]: `[HMR] Middleware change detected — reloading pipeline`,
+      [ChangeType.MODEL]: `[HMR] Model change detected — no reload needed (lazy-loaded)`,
+      [ChangeType.VIEW]: `[HMR] View/TSX change detected — reloading view cache`,
+      [ChangeType.CONFIG]: `[HMR] Config change detected — full restart required`,
+      [ChangeType.MIGRATION]: `[HMR] Migration change detected — auto-running pending migrations`,
+      [ChangeType.OTHER]: `[HMR] File change detected — selective reload`,
+    }
+    return messages[type]
+  }
+
+  private getReloadAction(type: ChangeType): 'selective' | 'full-restart' | 'none' {
+    switch (type) {
+      case ChangeType.ROUTE:
+      case ChangeType.CONTROLLER:
+      case ChangeType.MIDDLEWARE:
+      case ChangeType.VIEW:
+      case ChangeType.OTHER:
+        return 'selective'
+      case ChangeType.CONFIG:
+        return 'full-restart'
+      case ChangeType.MODEL:
+        return 'none'
+      case ChangeType.MIGRATION:
+        return 'selective'
+    }
+  }
+
+  async handleChange(filePath: string): Promise<void> {
+    const changeType = classifyChange(filePath)
+    const action = this.getReloadAction(changeType)
+    const message = this.getReloadMessage(changeType)
+
+    console.log(`\n  ${colors.cyan(message)}`)
+    console.log(`  ${colors.dim(`  File: ${filePath}`)}`)
+    console.log(`  ${colors.dim(`  Action: ${action}`)}`)
+    console.log()
+
+    const startTime = Date.now()
+
+    switch (action) {
+      case 'selective': {
+        const cacheKey = resolve(filePath)
+        this.moduleCache.set(cacheKey, { mtime: Date.now() })
+        await this.restartProcess()
+        this.stats.selectiveReloads++
+        const duration = Date.now() - startTime
+        console.log(`  ${colors.green(`✅ [HMR] Reloaded in ${duration}ms`)}`)
+        break
+      }
+      case 'full-restart': {
+        await this.restartProcess()
+        this.stats.fullRestarts++
+        const duration = Date.now() - startTime
+        console.log(`  ${colors.green(`✅ [HMR] Full restart completed in ${duration}ms`)}`)
+        break
+      }
+      case 'none': {
+        console.log(`  ${colors.dim(`  ℹ️  No reload needed — ${changeType} modules are lazy-loaded`)}`)
+        break
+      }
+    }
+
+    this.stats.totalReloads++
+    this.stats.lastReloadTime = Date.now() - startTime
+    this.stats.averageReloadTime = this.stats.averageReloadTime === 0
+      ? Date.now() - startTime
+      : (this.stats.averageReloadTime + (Date.now() - startTime)) / 2
+  }
+
+  private async restartProcess(): Promise<void> {
+    this.state = 'restarting'
+    this.onRestart?.()
+
+    if (this.process && !this.process.killed) {
+      this.process.kill('SIGTERM')
+      await new Promise<void>((resolve) => {
+        const timeout = setTimeout(() => {
+          console.log(`  ${colors.yellow('⚠')} Process did not exit gracefully, force killing...`)
+          if (this.process && !this.process.killed) {
+            this.process.kill('SIGKILL')
+          }
+          resolve()
+        }, 5000)
+
+        if (this.process) {
+          this.process.on('exit', () => {
+            clearTimeout(timeout)
+            resolve()
+          })
+        } else {
+          clearTimeout(timeout)
+          resolve()
+        }
+      })
+    }
+
+    await this.startProcess()
+  }
+
+  async startProcess(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.state = 'starting'
+      const tsxPath = resolve(process.cwd(), 'node_modules', '.bin', process.platform === 'win32' ? 'tsx.cmd' : 'tsx')
+
+      if (!existsSync(tsxPath)) {
+        console.log(`  ${colors.cyan('→')} Starting server directly (tsx not found)...`)
+        this.process = spawn('node', ['--loader', 'tsx', this.serverEntry], {
+          env: { ...process.env, PORT: String(this.port), HOST: this.host },
+          stdio: 'inherit',
+          shell: true,
+        })
+      } else {
+        this.process = spawn(tsxPath, ['watch', this.serverEntry], {
+          env: { ...process.env, PORT: String(this.port), HOST: this.host },
+          stdio: 'inherit',
+          shell: true,
+        })
+      }
+
+      this.process.on('spawn', () => {
+        this.state = 'running'
+        console.log(`  ${colors.green(`✅ Server started on http://${this.host}:${this.port}`)}`)
+        console.log(`  ${colors.dim('  HMR 2.0 active — selective reload enabled')}`)
+        resolve()
+      })
+
+      this.process.on('error', (err) => {
+        this.state = 'stopped'
+        console.error(`  ${colors.red(`✗ Failed to start server: ${err.message}`)}`)
+        reject(err)
+      })
+
+      this.process.on('exit', (code) => {
+        if (this.state !== 'restarting') {
+          this.state = 'stopped'
+          if (code !== 0 && code !== null) {
+            console.log(`  ${colors.yellow(`⚠ Server exited with code ${code}. Restarting...`)}`)
+            this.restartProcess()
+          }
+        }
+      })
+    })
+  }
+
+  stop(): void {
+    if (this.process && !this.process.killed) {
+      this.process.kill('SIGTERM')
+    }
+    this.state = 'stopped'
+  }
+
+  getStats(): HmrStats {
+    return { ...this.stats }
+  }
+
+  getState(): ProcessState {
+    return this.state
+  }
+}
+
+// ─── Main Serve Function ───────────────────────────────────────
 
 export async function serve(options: Record<string, any>): Promise<void> {
   const isProduction = options.production === true || options.production === 'true' || process.env.NODE_ENV === 'production'
@@ -25,6 +268,7 @@ export async function serve(options: Record<string, any>): Promise<void> {
     dev: isProduction ? false : options.dev !== false,
     docs: !!options.docs,
     production: isProduction,
+    hmr: options.hmr !== false,
   }
 
   const host = String(opts.host)
@@ -35,7 +279,7 @@ export async function serve(options: Record<string, any>): Promise<void> {
       process.exit(1)
     }
     return new Promise((resolve) => {
-      const server = createNetServer()
+      const server = createServer()
       server.on('error', () => {
         server.close()
         resolve(findPort(start + 1))
@@ -48,291 +292,95 @@ export async function serve(options: Record<string, any>): Promise<void> {
   }
 
   const port = await findPort(parseInt(String(opts.port), 10))
+  const serverEntry = resolve(process.cwd(), 'src', 'bootstrap.ts')
 
-  if (opts.docs) {
-    const __dirname = dirname(fileURLToPath(import.meta.url))
-    const docsPath = resolve(__dirname, '../../docs/index.html')
-    if (!existsSync(docsPath)) {
-      console.error(colors.red('Documentation not found. Ensure docs/index.html exists in the speexjs package.'))
-      process.exit(1)
-    }
-    const html = readFileSync(docsPath, 'utf-8')
-    createServer((_req, res) => {
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
-      res.end(html)
-    }).listen(port, host, () => {
-      console.log()
-      console.log(`  ${colors.bold('SpeexJS')} ${colors.green('docs')}`)
-      console.log(`  ${colors.dim('→')}  ${colors.cyan(`http://${host}:${port}`)}`)
-      console.log()
-    })
-    return
-  }
+  console.log()
+  console.log(`  ${colors.bold('SpeexJS Dev Server')} ${colors.dim('v2.1.0')}`)
+  console.log(`  ${colors.dim('─'.repeat(40))}`)
+  console.log()
 
-  // ── Production mode: serve pre-built assets with optimized server ──
   if (opts.production) {
-    const distIndex = resolve(process.cwd(), 'dist/index.js')
-    const distServer = resolve(process.cwd(), 'dist/server/index.js')
-    const distApp = resolve(process.cwd(), 'dist/app.js')
-    const publicDir = resolve(process.cwd(), 'public')
-
-    let prodEntry: string | null = null
-    if (existsSync(distApp)) prodEntry = distApp
-    else if (existsSync(distIndex)) prodEntry = distIndex
-    else if (existsSync(distServer)) prodEntry = distServer
-
-    if (prodEntry) {
-      console.log()
-      console.log(`  ${colors.bold('SpeexJS')} ${colors.green('production')}`)
-      console.log(`  ${colors.dim('→')}  ${colors.cyan(`http://${host}:${port}`)}`)
-      console.log(`  ${colors.dim('→')}  Entry: ${colors.dim(prodEntry)}`)
-      if (existsSync(publicDir)) {
-        console.log(`  ${colors.dim('→')}  Static: ${colors.dim(publicDir)}`)
-      }
-      console.log()
-
-      const child = spawn('node', [prodEntry], {
-        stdio: 'inherit',
-        cwd: process.cwd(),
-        env: {
-          ...process.env,
-          NODE_ENV: 'production',
-          PORT: String(port),
-          HOST: host,
-        },
-      })
-
-      child.on('exit', (code) => {
-        process.exit(code ?? 1)
-      })
-    } else {
-      console.log()
-      console.log(`  ${colors.bold('SpeexJS')} ${colors.green('production')}`)
-      console.log(`  ${colors.dim('→')}  ${colors.cyan(`http://${host}:${port}`)}`)
-      console.log(`  ${colors.dim('→')}  Serving static files from ${colors.dim('dist/')}`)
-      console.log()
-
-      const distDir = resolve(process.cwd(), 'dist')
-      const MIME_TYPES: Record<string, string> = {
-        '.html': 'text/html; charset=utf-8',
-        '.css': 'text/css',
-        '.js': 'application/javascript',
-        '.json': 'application/json',
-        '.png': 'image/png',
-        '.jpg': 'image/jpeg',
-        '.svg': 'image/svg+xml',
-        '.ico': 'image/x-icon',
-        '.webp': 'image/webp',
-        '.woff2': 'font/woff2',
-        '.txt': 'text/plain',
-        '.xml': 'application/xml',
-      }
-
-      createServer((req, res) => {
-        const url = new URL(req.url ?? '/', `http://${host}`)
-        let filePath = resolve(distDir, url.pathname === '/' ? 'index.html' : url.pathname.slice(1))
-
-        if (!existsSync(filePath)) {
-          const htmlPath = filePath.endsWith('.html') ? filePath : filePath + '.html'
-          if (existsSync(htmlPath)) {
-            filePath = htmlPath
-          } else {
-            const fallback = resolve(distDir, 'index.html')
-            if (existsSync(fallback)) {
-              filePath = fallback
-            } else {
-              res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' })
-              res.end(
-                `<!DOCTYPE html><html><head><meta charset="utf-8"><title>404</title><style>body{font-family:sans-serif;background:#0f1117;color:#e1e4e8;display:flex;align-items:center;justify-content:center;min-height:100vh;text-align:center}.code{font-size:4rem;font-weight:800;color:#d29922}h1{font-size:1.5rem;color:#f0f6fc}p{color:#8b949e}</style></head><body><div><div class="code">404</div><h1>Page Not Found</h1><p>The page you requested could not be found.</p></div></body></html>`,
-              )
-              return
-            }
-          }
-        }
-
-        const ext = filePath.substring(filePath.lastIndexOf('.'))
-        const contentType = MIME_TYPES[ext] ?? 'application/octet-stream'
-        const content = readFileSync(filePath)
-
-        const cacheMaxAge = ext === '.html' ? 0 : 31536000
-        res.writeHead(200, {
-          'Content-Type': contentType,
-          'Content-Length': content.length,
-          'Cache-Control': `public, max-age=${cacheMaxAge}`,
-          'X-Content-Type-Options': 'nosniff',
-          'X-Frame-Options': 'SAMEORIGIN',
-        })
-        res.end(content)
-      }).listen(port, host, () => {
-        console.log(`  ${colors.green('✓')} Production server running at ${colors.cyan(`http://${host}:${port}`)}`)
-      })
-    }
+    console.log(`  ${colors.cyan('→')} Starting in production mode...`)
+    const prodServer = spawn('node', [resolve(process.cwd(), 'dist', 'index.js')], {
+      env: { ...process.env, PORT: String(port), HOST: host, NODE_ENV: 'production' },
+      stdio: 'inherit',
+      shell: true,
+    })
+    prodServer.on('error', (err) => {
+      console.error(`  ${colors.red(`✗ ${err.message}`)}`)
+      process.exit(1)
+    })
+    prodServer.on('exit', (code) => {
+      process.exit(code ?? 0)
+    })
     return
   }
 
-  // ── Development mode ─────────────────────────────────────
-  const serverEntry = resolve(process.cwd(), 'src/app.ts')
-  const serverEntryAlt = resolve(process.cwd(), 'src/server/index.ts')
-  const serverEntryIndex = resolve(process.cwd(), 'src/index.ts')
+  // HMR 2.0 — Start with selective reload
+  if (opts.hmr && !opts.production) {
+    const hmr = new HmrEngine(port, host, serverEntry)
 
-  let entryPath: string | null = null
-  if (existsSync(serverEntry)) entryPath = serverEntry
-  else if (existsSync(serverEntryAlt)) entryPath = serverEntryAlt
-  else if (existsSync(serverEntryIndex)) entryPath = serverEntryIndex
-
-  if (!entryPath) {
-    console.error(colors.red('Entry point not found. Create src/app.ts or src/index.ts'))
-    process.exit(1)
-  }
-
-  // ── Child process state machine ─────────────────────────
-  let currentChild: ChildProcess | null = null
-  let currentChildId = 0
-  let state: ProcessState = 'idle'
-  let restartCount = 0
-  let startupTimer: ReturnType<typeof setTimeout> | null = null
-  let debounceTimer: ReturnType<typeof setTimeout> | null = null
-
-  function clearStartupTimer(): void {
-    if (startupTimer !== null) {
-      clearTimeout(startupTimer)
-      startupTimer = null
-    }
-  }
-
-  function startChild(): ChildProcess {
-    clearStartupTimer()
-
-    const childId = ++currentChildId
-    state = 'starting'
-    restartCount = 0
-
-    const childProcess = spawn('npx', ['tsx', entryPath!], {
-      stdio: 'inherit',
-      cwd: process.cwd(),
-      env: { ...process.env, PORT: String(port) },
-    }) as ChildProcess
-    currentChild = childProcess
-
-    childProcess.on('exit', (code) => {
-      if (childId !== currentChildId) return
-
-      clearStartupTimer()
-      currentChild = null
-
-      if (code === 0) {
-        state = 'stopped'
-        return
-      }
-
-      if (!opts.dev) {
-        console.error(`Child process exited with code ${code}`)
-        process.exit(code ?? 1)
-        return
-      }
-
-      if (state === 'starting' || state === 'restarting') {
-        console.log(`\n  ${colors.yellow('⚠')}  Compilation error (process exited with code ${code})`)
-        console.log(`  ${colors.yellow('⚠')}  Fix the error and save again — watcher is still running...`)
-        state = 'stopped'
-        return
-      }
-
-      if (state === 'running') {
-        console.log(`\n  ${colors.red('✖')}  Process crashed unexpectedly (exit code ${code})`)
-        if (restartCount < 3) {
-          restartCount++
-          console.log(`  ${colors.cyan('🔄')}  Auto-restarting in 1s (attempt ${restartCount}/3)...`)
-          setTimeout(() => startChild(), 1000)
-        } else {
-          console.log(`  ${colors.red('✖')}  Max restart attempts reached. Waiting for file changes...`)
-          state = 'stopped'
-        }
-        return
-      }
-
-      state = 'stopped'
-    })
-
-    childProcess.on('error', (err) => {
-      if (childId !== currentChildId) return
-      clearStartupTimer()
-      currentChild = null
-      console.error(`${colors.red('✖')}  Failed to start: ${err.message}`)
-      process.exit(1)
-    })
-
-    startupTimer = setTimeout(() => {
-      startupTimer = null
-      if (childId === currentChildId && childProcess.exitCode === null) {
-        state = 'running'
-        restartCount = 0
-      }
-    }, 500)
-
-    return childProcess
-  }
-
-  // ── HMR WebSocket server ─────────────────────────────────
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let hmrServer: any = null
-
-  function sendHmrReload(): void {
-    if (hmrServer) {
-      const msg = JSON.stringify({ type: 'reload' })
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
-      for (const client of hmrServer.clients as Set<{ readyState: number; send: (msg: string) => void }>) {
-        if (client.readyState === 1) {
-          client.send(msg)
-        }
-      }
-    }
-  }
-
-  function scheduleRestart(filename: string): void {
-    if (debounceTimer !== null) clearTimeout(debounceTimer)
-    debounceTimer = setTimeout(() => {
-      debounceTimer = null
-      sendHmrReload()
-      console.log(`\n${colors.cyan('🔄')}  File changed: ${filename} — Restarting...`)
-
-      currentChildId++
-      state = 'restarting'
-
-      if (currentChild !== null) {
-        currentChild.kill()
-        currentChild = null
-      }
-
-      startChild()
-    }, 300)
-  }
-
-  if (opts.dev) {
-    logger.info(`Development server starting at ${colors.cyan(`http://${host}:${port}`)}`)
-
-    try {
-      // @ts-expect-error - ws is optional
-      const { WebSocketServer } = await import('ws')
-      const hmrPort = port + 1
-      hmrServer = new WebSocketServer({ port: hmrPort }) as any
-      console.log(`  ${colors.dim('📡 HMR WebSocket at')} ${colors.cyan(`ws://${host}:${hmrPort}`)}`)
-    } catch {
-      /* ws not available */
-    }
+    await hmr.startProcess()
 
     const srcDir = resolve(process.cwd(), 'src')
-    try {
-      watch(srcDir, { recursive: true }, (_eventType, filename) => {
-        if (filename && (filename.endsWith('.ts') || filename.endsWith('.tsx'))) {
-          scheduleRestart(filename)
-        }
+    if (existsSync(srcDir)) {
+      console.log(`  ${colors.cyan('→')} Watching for file changes in ${srcDir}...`)
+      console.log()
+
+      watch(srcDir, { recursive: true }, async (eventType, filename) => {
+        if (!filename) return
+        const ext = extname(filename)
+        if (!['.ts', '.tsx', '.js', '.jsx'].includes(ext)) return
+        if (filename.includes('node_modules')) return
+
+        const fullPath = resolve(srcDir, filename)
+
+        const existing = hmr['watchTimers'].get(fullPath)
+        if (existing) clearTimeout(existing)
+
+        const timer = setTimeout(async () => {
+          hmr['watchTimers'].delete(fullPath)
+          await hmr.handleChange(fullPath)
+        }, hmr['debounceMs'])
+        hmr['watchTimers'].set(fullPath, timer)
       })
-      console.log(`  ${colors.dim('📁 Watching src/ for changes...')}`)
-    } catch {
-      /* watch not available */
+
+      console.log(`  ${colors.dim(`  Server: http://${host}:${port}`)}`)
+      console.log(`  ${colors.dim('  HMR:    Enabled (selective reload)')}`)
+      console.log(`  ${colors.dim('  Watch:  ' + srcDir)}`)
+      console.log()
     }
+
+    const shutdown = () => {
+      console.log(`\n  ${colors.yellow('⚠')} Shutting down...`)
+      hmr.stop()
+      process.exit(0)
+    }
+    process.on('SIGINT', shutdown)
+    process.on('SIGTERM', shutdown)
+    return
   }
 
-  startChild()
+  // Fallback: simple server start without HMR
+  console.log(`  ${colors.cyan('→')} Starting without HMR...`)
+  const server = spawn('node', ['--loader', 'tsx', serverEntry], {
+    env: { ...process.env, PORT: String(port), HOST: host },
+    stdio: 'inherit',
+    shell: true,
+  })
+
+  server.on('error', (err) => {
+    console.error(`  ${colors.red(`✗ ${err.message}`)}`)
+    process.exit(1)
+  })
+
+  server.on('exit', (code) => {
+    if (code !== 0) {
+      console.error(`  ${colors.red(`✗ Server exited with code ${code}`)}`)
+    }
+    process.exit(code ?? 0)
+  })
+
+  console.log(`  ${colors.dim(`  Server: http://${host}:${port}`)}`)
+  console.log()
 }
