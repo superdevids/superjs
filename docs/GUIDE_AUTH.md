@@ -565,6 +565,303 @@ const match = verifyPassword('user-password', hashed) // true
 
 ---
 
+## SAML 2.0 SSO
+
+Configure SAML2 identity provider authentication via `SamlGuard`.
+
+### Setup
+
+```typescript
+import { SamlGuard } from 'speexjs/server/auth/saml-guard'
+
+const samlGuard = new SamlGuard({
+  entryPoint: 'https://idp.example.com/sso',
+  issuer: 'https://myapp.com',
+  certificate: fs.readFileSync('idp.crt', 'utf-8'),
+  provider: {
+    findById: async (id) => User.find(id),
+    findByCredential: async (field, value) =>
+      User.where(field, value).first(),
+  },
+})
+```
+
+### Routes
+
+```typescript
+// Redirect to IdP
+app.get('/auth/saml2/login', async (ctx) => {
+  const url = await samlGuard.generateLoginUrl()
+  ctx.response.redirect(url)
+})
+
+// Handle ACS callback
+app.post('/auth/saml2/callback', async (ctx) => {
+  const body = await ctx.request.formData()
+  const user = await samlGuard.handleCallback(body.SAMLResponse)
+  await guard.login(user.id)
+  ctx.response.redirect('/dashboard')
+})
+```
+
+**Required environment variables:**
+
+| Variable | Description |
+|---|---|
+| `SAML_ENTRY_POINT` | IdP SSO URL |
+| `SAML_ISSUER` | Your application entity ID |
+| `SAML_CERT_PATH` | Path to IdP X.509 certificate |
+
+---
+
+## OpenID Connect
+
+Configure OIDC authentication via `OidcGuard` with Google, Microsoft, Okta, or any compliant provider.
+
+### Setup
+
+```typescript
+import { OidcGuard } from 'speexjs/server/auth/oidc-guard'
+
+const oidcGuard = new OidcGuard({
+  issuer: 'https://accounts.google.com',
+  clientId: process.env.GOOGLE_CLIENT_ID!,
+  clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+  redirectUri: 'http://localhost:3000/auth/callback',
+  provider: userProvider,
+})
+```
+
+### Routes
+
+```typescript
+// Redirect to provider
+app.get('/auth/oidc/login', async (ctx) => {
+  const url = await oidcGuard.generateAuthUrl({ scope: 'openid profile email' })
+  ctx.response.redirect(url)
+})
+
+// Handle callback
+app.get('/auth/oidc/callback', async (ctx) => {
+  const code = ctx.query.code as string
+  const user = await oidcGuard.handleCallback(code)
+  await guard.login(user.id)
+  ctx.response.redirect('/dashboard')
+})
+```
+
+### Provider-Specific Configuration
+
+```typescript
+// Microsoft
+new OidcGuard({
+  issuer: 'https://login.microsoftonline.com/{tenant}/v2.0',
+  clientId: process.env.MS_CLIENT_ID,
+  clientSecret: process.env.MS_CLIENT_SECRET,
+  redirectUri: 'http://localhost:3000/auth/callback',
+})
+
+// Okta
+new OidcGuard({
+  issuer: 'https://{domain}.okta.com',
+  clientId: process.env.OKTA_CLIENT_ID,
+  clientSecret: process.env.OKTA_CLIENT_SECRET,
+  redirectUri: 'http://localhost:3000/auth/callback',
+})
+```
+
+**Required environment variables:**
+
+| Variable | Description |
+|---|---|
+| `OIDC_ISSUER` | OpenID Connect issuer URL |
+| `OIDC_CLIENT_ID` | Client ID from provider |
+| `OIDC_CLIENT_SECRET` | Client secret from provider |
+| `OIDC_REDIRECT_URI` | Callback URL |
+
+---
+
+## Magic Link (Passwordless)
+
+Implement passwordless login via email magic links using `MagicLinkAuth`.
+
+### Setup
+
+```typescript
+import { MagicLinkAuth } from 'speexjs/server/auth/magic-link'
+
+const magicLink = new MagicLinkAuth({
+  secret: process.env.APP_KEY!,
+  expiresIn: 900, // 15 minutes
+  provider: userProvider,
+})
+```
+
+### Request Magic Link
+
+```typescript
+app.post('/auth/magic-link', async (ctx) => {
+  const { email } = await ctx.request.json()
+
+  const user = await User.where('email', email).first()
+  if (!user) {
+    return ctx.response.status(404).json({ error: 'User not found' })
+  }
+
+  const token = await magicLink.generateToken(user.id)
+
+  // Send email with link: /auth/magic-link/verify?token=${token}
+  await sendEmail(email, 'Your login link', `/auth/magic-link/verify?token=${token}`)
+
+  ctx.response.json({ message: 'Check your email for the login link' })
+})
+```
+
+### Verify Token
+
+```typescript
+app.get('/auth/magic-link/verify', async (ctx) => {
+  const token = ctx.query.token as string
+
+  try {
+    const userId = await magicLink.consumeToken(token)
+    await guard.login(userId)
+    ctx.response.redirect('/dashboard')
+  } catch (err) {
+    ctx.response.status(400).json({ error: 'Invalid or expired token' })
+  }
+})
+```
+
+---
+
+## WebAuthn / Passkeys
+
+Register and authenticate using platform biometrics (Touch ID, Windows Hello, Face ID) via `WebAuthn`.
+
+### Setup
+
+```typescript
+import { WebAuthn } from 'speexjs/server/auth/webauthn'
+
+const webauthn = new WebAuthn({
+  rpName: 'My App',
+  rpId: 'localhost', // Use your domain in production
+  provider: userProvider,
+})
+```
+
+### Registration
+
+```typescript
+// Start registration
+app.post('/auth/webauthn/register/begin', auth(), async (ctx) => {
+  const user = (ctx as any).user
+  const options = await webauthn.beginRegistration(user.id)
+  ctx.response.json(options) // Pass to navigator.credentials.create()
+})
+
+// Complete registration
+app.post('/auth/webauthn/register/complete', auth(), async (ctx) => {
+  const user = (ctx as any).user
+  const credential = await ctx.request.json()
+  const verified = await webauthn.completeRegistration(user.id, credential)
+  ctx.response.json({ verified })
+})
+```
+
+### Authentication
+
+```typescript
+// Start login
+app.post('/auth/webauthn/login/begin', async (ctx) => {
+  const { email } = await ctx.request.json()
+  const user = await User.where('email', email).first()
+  if (!user) return ctx.response.status(404).json({ error: 'User not found' })
+
+  const options = await webauthn.beginAuthentication(user.id)
+  ctx.response.json(options) // Pass to navigator.credentials.get()
+})
+
+// Complete login
+app.post('/auth/webauthn/login/complete', async (ctx) => {
+  const assertion = await ctx.request.json()
+  const user = await webauthn.completeAuthentication(assertion)
+  await guard.login(user.id)
+  ctx.response.json({ user })
+})
+```
+
+---
+
+## Session Management
+
+List, inspect, and revoke active user sessions using `SessionManager`.
+
+### Setup
+
+```typescript
+import { SessionManager } from 'speexjs/server/auth/session-manager'
+
+const sessions = new SessionManager({
+  store: db, // Uses the database connection
+})
+```
+
+### List Sessions
+
+```typescript
+app.get('/auth/sessions', auth(), async (ctx) => {
+  const user = (ctx as any).user
+  const userSessions = await sessions.listForUser(user.id)
+
+  ctx.response.json({
+    data: userSessions.map(s => ({
+      id: s.id,
+      ip: s.ip_address,
+      userAgent: s.user_agent,
+      lastActive: s.last_active_at,
+      isCurrent: s.id === ctx.request.cookie('session_id'),
+    })),
+  })
+})
+```
+
+### Revoke Sessions
+
+```typescript
+// Revoke a single session
+app.delete('/auth/sessions/:id', auth(), async (ctx) => {
+  await sessions.revoke(ctx.params.id)
+  ctx.response.json({ revoked: true })
+})
+
+// Revoke all other sessions
+app.post('/auth/sessions/revoke-others', auth(), async (ctx) => {
+  const currentSessionId = ctx.request.cookie('session_id')
+  const user = (ctx as any).user
+  const allSessions = await sessions.listForUser(user.id)
+
+  for (const session of allSessions) {
+    if (session.id !== currentSessionId) {
+      await sessions.revoke(session.id)
+    }
+  }
+
+  ctx.response.json({ revoked: true })
+})
+
+// Revoke all sessions (forces re-login)
+app.post('/auth/sessions/revoke-all', auth(), async (ctx) => {
+  const user = (ctx as any).user
+  await sessions.revokeAllForUser(user.id)
+  await guard.logout()
+  ctx.response.json({ message: 'All sessions revoked' })
+})
+```
+
+---
+
 ## Full Auth Example
 
 ```typescript

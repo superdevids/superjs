@@ -1,6 +1,6 @@
 # Getting Started with SpeexJS
 
-**Version:** 1.6.1 | **License:** MIT | **Runtime:** Node.js 18+ / Bun
+**Version:** 3.0.0 | **License:** MIT | **Runtime:** Node.js 18+ / Bun
 
 ## What is SpeexJS?
 
@@ -27,12 +27,22 @@ app.listen(3000, () => {
 ### Option A: Create a new project (recommended)
 
 ```bash
+npx @speex/create my-app
+cd my-app
+npm run dev
+```
+
+Zero-install bootstrap — no global installation needed. The `npx @speex/create` command pulls the latest template and scaffolds immediately.
+
+Alternatively, the classic `init` command:
+
+```bash
 npx speexjs init my-app
 cd my-app
 npm run dev
 ```
 
-This scaffolds a fullstack project with TypeScript, routes directory, database config, and optional frontend (React, Vue, or SpeexJS's native TSX view engine).
+Both scaffold a fullstack project with TypeScript, routes directory, database config, and optional frontend (React, Vue, or SpeexJS's native TSX view engine).
 
 Available templates:
 
@@ -462,6 +472,31 @@ async function main() {
 
 main()
 ```
+
+## DevTools Dashboard
+
+SpeexJS v3.0.0 ships with a development-only DevTools Dashboard at `/_speex/devtools`. Launch your app in development mode and visit:
+
+```
+http://localhost:3000/_speex/devtools
+```
+
+The dashboard provides:
+
+- **Route Inspector** — Browse all registered routes with methods, middleware, and performance
+- **Database Queries** — Live query log with timing, bindings, and EXPLAIN support
+- **Cache Stats** — Hit/miss ratios and cache keys
+- **Config Viewer** — Full resolved configuration tree
+- **Auth Debugger** — Session contents, guard states, and token inspection
+- **Queue Monitor** — Pending, failed, and completed jobs
+
+Enable by setting `SPEEXJS_DEBUG=true` or passing `debug: true` in your config:
+
+```bash
+SPEEXJS_DEBUG=true npm run dev
+```
+
+---
 
 ## Next Steps
 

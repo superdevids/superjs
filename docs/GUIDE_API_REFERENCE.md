@@ -775,3 +775,268 @@ SPEEXJS_DEBUG=true npm run dev
 ```
 
 Then visit `http://localhost:3000/_speexjs/dashboard` for routes, queries, cache stats, and config values.
+
+---
+
+## DevTools (`speexjs/server/devtools`)
+
+### DevToolsDashboard
+
+In-app development dashboard at `/_speex/devtools`. Provides route inspector, live query log, cache stats, config viewer, auth debugger, and queue monitor.
+
+```typescript
+import { DevToolsDashboard } from 'speexjs/server/devtools'
+
+app.use(new DevToolsDashboard().middleware())
+```
+
+---
+
+## Search (`speexjs/server/search`)
+
+Full-text search engine with TF-IDF indexing.
+
+```typescript
+import { SearchEngine, TfIdfIndex, SearchQueryBuilder } from 'speexjs/server/search'
+
+const index = new TfIdfIndex()
+index.addDocument('doc1', 'the quick brown fox')
+index.addDocument('doc2', 'jumps over the lazy dog')
+
+const engine = new SearchEngine(index)
+const results = engine.search('quick fox')
+
+const builder = new SearchQueryBuilder()
+  .withTerm('fox')
+  .withBoost(1.5)
+  .build()
+```
+
+---
+
+## Storage Validation (`speexjs/server/storage/validation`)
+
+### FileValidator
+
+Validate uploaded files by MIME type, size, and extension.
+
+```typescript
+import { FileValidator } from 'speexjs/server/storage/validation'
+
+const validator = new FileValidator()
+  .allowMime('image/jpeg', 'image/png')
+  .maxSize(5 * 1024 * 1024) // 5MB
+  .allowExtensions('.jpg', '.png')
+
+const errors = validator.validate(uploadedFile)
+```
+
+---
+
+## Image Processing (`speexjs/server/storage/image`)
+
+### ImageProcessor
+
+Resize, crop, format-convert, and optimize images server-side.
+
+```typescript
+import { ImageProcessor } from 'speexjs/server/storage/image'
+
+const processor = new ImageProcessor(inputBuffer)
+await processor.resize(800, 600).toFile('output.jpg')
+await processor.crop(400, 400).toBuffer('webp')
+```
+
+---
+
+## Signed URLs (`speexjs/server/storage/signed-url`)
+
+### SignedUrlGenerator
+
+Generate time-limited signed URLs for private storage access.
+
+```typescript
+import { SignedUrlGenerator } from 'speexjs/server/storage/signed-url'
+
+const gen = new SignedUrlGenerator({ secret: process.env.APP_KEY })
+const url = gen.sign('/files/report.pdf', { expiresIn: 3600 })
+const verified = gen.verify(url) // { path, expiresAt } | null
+```
+
+---
+
+## Auth Guards (`speexjs/server/auth`)
+
+### SamlGuard
+
+SAML 2.0 SSO authentication guard.
+
+```typescript
+import { SamlGuard } from 'speexjs/server/auth/saml-guard'
+
+const samlGuard = new SamlGuard({
+  entryPoint: 'https://idp.example.com/sso',
+  issuer: 'https://myapp.com',
+  certificate: fs.readFileSync('idp.crt', 'utf-8'),
+  provider: userProvider,
+})
+```
+
+### OidcGuard
+
+OpenID Connect authentication guard (Google, Microsoft, Okta, etc.).
+
+```typescript
+import { OidcGuard } from 'speexjs/server/auth/oidc-guard'
+
+const oidcGuard = new OidcGuard({
+  issuer: 'https://accounts.google.com',
+  clientId: process.env.GOOGLE_CLIENT_ID,
+  clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+  redirectUri: 'http://localhost:3000/auth/callback',
+  provider: userProvider,
+})
+```
+
+### MagicLinkAuth
+
+Passwordless login via email magic links.
+
+```typescript
+import { MagicLinkAuth } from 'speexjs/server/auth/magic-link'
+
+const magicLink = new MagicLinkAuth({
+  secret: process.env.APP_KEY,
+  expiresIn: 900, // 15 minutes
+  provider: userProvider,
+})
+
+const token = await magicLink.generateToken('user@example.com')
+const user = await magicLink.consumeToken(token)
+```
+
+### WebAuthn
+
+WebAuthn (passkeys) authentication with platform biometrics.
+
+```typescript
+import { WebAuthn } from 'speexjs/server/auth/webauthn'
+
+const webauthn = new WebAuthn({
+  rpName: 'My App',
+  rpId: 'localhost',
+  provider: userProvider,
+})
+
+const registration = await webauthn.beginRegistration(userId)
+const verified = await webauthn.completeRegistration(userId, credential)
+const assertion = await webauthn.beginAuthentication()
+const user = await webauthn.completeAuthentication(assertion)
+```
+
+### SessionManager
+
+List, inspect, and revoke active user sessions.
+
+```typescript
+import { SessionManager } from 'speexjs/server/auth/session-manager'
+
+const sessions = new SessionManager({ store: db })
+
+const userSessions = await sessions.listForUser(userId)
+await sessions.revoke(sessionId)
+await sessions.revokeAllForUser(userId)
+```
+
+---
+
+## Query Builder 2.0 (`speexjs/server/database/query-v2`)
+
+Advanced database query operations available in v3.0.0.
+
+```typescript
+import { rawQuery, streamQuery, analyzeQuery, batchInsert, batchUpdate } from 'speexjs/server/database/query-v2'
+
+// Type-safe raw query
+const users = await rawQuery<User>('SELECT * FROM users WHERE age > ?', [18])
+
+// Streaming
+for await (const row of streamQuery('SELECT * FROM large_table')) {
+  process(row)
+}
+
+// Query analysis (EXPLAIN)
+const plan = await analyzeQuery('SELECT * FROM users WHERE email = ?', ['test@test.com'])
+
+// Batch insert (chunked)
+await batchInsert('users', [
+  { name: 'Alice' }, { name: 'Bob' }, /* ... */
+], { chunkSize: 500 })
+
+// Batch update by key field
+await batchUpdate('users', [
+  { id: 1, name: 'Alice Smith' },
+  { id: 2, name: 'Bob Jones' },
+], 'id')
+```
+
+---
+
+## Router Deprecation (`speexjs/server/router/deprecation`)
+
+Mark routes as deprecated with automatic sunset headers.
+
+```typescript
+import { formatDeprecationHeaders } from 'speexjs/server/router/deprecation'
+
+const headers = formatDeprecationHeaders({
+  deprecationDate: new Date('2025-06-01'),
+  sunsetDate: new Date('2025-09-01'),
+  link: 'https://docs.myapp.com/api/v2/migration',
+})
+// Sets: Deprecation, Sunset, Link headers
+```
+
+---
+
+## Queue (`speexjs/server/queue`)
+
+Async job queue with retries, delays, and concurrency control.
+
+```typescript
+import { Queue, Job, parseDuration } from 'speexjs/server/queue'
+
+const queue = new Queue({ concurrency: 5 })
+
+queue.process(async (job: Job) => {
+  console.log(`Processing job ${job.id}`)
+  await doWork(job.data)
+})
+
+await queue.add('email', { to: 'user@test.com' }, {
+  delay: parseDuration('5m'),
+  retries: 3,
+})
+```
+
+---
+
+## Schedule (`speexjs/server/schedule`)
+
+Cron-based task scheduler.
+
+```typescript
+import { Scheduler, parseCron, cronMatches } from 'speexjs/server/schedule'
+
+const scheduler = new Scheduler()
+
+scheduler.add('daily-report', '0 6 * * *', async () => {
+  await generateReport()
+})
+
+scheduler.start()
+
+// Utilities
+const expression = parseCron('0 6 * * *')
+const matches = cronMatches('0 6 * * *', new Date())
+```

@@ -63,6 +63,65 @@ const result = await db.transaction(async (trx) => {
 const result = await db.raw('SELECT * FROM users WHERE active = ?', [true])
 ```
 
+### Raw SQL (v3.0.0 Type-safe Queries)
+
+```typescript
+import { rawQuery, streamQuery, analyzeQuery, batchInsert, batchUpdate } from 'speexjs/server/database/query-v2'
+
+// Type-safe raw query — returns typed results
+const users = await rawQuery<User>('SELECT * FROM users WHERE age > ?', [18])
+// users: User[]
+```
+
+### Streaming (v3.0.0)
+
+Stream large result sets without loading everything into memory:
+
+```typescript
+for await (const row of streamQuery('SELECT * FROM large_table WHERE processed = false')) {
+  await processRow(row)
+}
+// Memory-efficient — rows are yielded one at a time
+```
+
+### Query Analysis (v3.0.0)
+
+Run EXPLAIN to analyze query performance:
+
+```typescript
+const plan = await analyzeQuery(
+  'SELECT * FROM users WHERE email = ?',
+  ['test@test.com']
+)
+console.log(plan)
+// { query: '...', plan: [...], warnings: [...], suggestions: [...] }
+```
+
+### Batch Insert (v3.0.0)
+
+Insert many rows efficiently with automatic chunking:
+
+```typescript
+await batchInsert('users', [
+  { name: 'Alice', email: 'alice@test.com' },
+  { name: 'Bob', email: 'bob@test.com' },
+  { name: 'Charlie', email: 'charlie@test.com' },
+  // ... thousands of rows
+], { chunkSize: 500 }) // 500 rows per INSERT statement
+```
+
+### Batch Update (v3.0.0)
+
+Update many rows by key field in a single operation:
+
+```typescript
+await batchUpdate('users', [
+  { id: 1, name: 'Alice Smith', email: 'alice@newdomain.com' },
+  { id: 2, name: 'Bob Jones', email: 'bob@newdomain.com' },
+  { id: 3, name: 'Charlie Brown' },
+], 'id') // 'id' is the key field used for matching
+```
+
 ---
 
 ## QueryBuilder

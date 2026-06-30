@@ -4,7 +4,7 @@ The `speexjs` CLI provides 30+ commands for project scaffolding, code generation
 
 ```bash
 speexjs --help
-speexjs -v            # → v1.6.1
+speexjs -v            # → v3.0.0
 ```
 
 ---
@@ -341,11 +341,12 @@ speexjs make:flag dark-mode
 
 ### `speexjs make:test`
 
-Generate a test file.
+Generate a test file. In v3.0.0, can also generate tests by introspecting an existing controller.
 
 ```bash
 speexjs make:test UserController
 speexjs make:test AuthLogin
+speexjs make:test UserController --from-controller   # v3.0.0: auto-generates tests from controller routes
 ```
 
 **Output:** `tests/UserController.test.ts`
@@ -578,6 +579,61 @@ Generates models, controllers, routes, migrations, views, and configuration matc
 
 ---
 
+## Metrics Commands
+
+### `speexjs metrics:report`
+
+Generate a route latency report.
+
+```bash
+speexjs metrics:report
+speexjs metrics:report --top 20        # Show slowest 20 routes
+speexjs metrics:report --output ./docs  # Output to directory
+```
+
+### `speexjs metrics:bundle`
+
+Analyze production bundle size.
+
+```bash
+speexjs metrics:bundle
+speexjs metrics:bundle --report  # Generate full HTML report
+```
+
+### `speexjs metrics:queries`
+
+Analyze database query performance from query logs.
+
+```bash
+speexjs metrics:queries
+speexjs metrics:queries --top 10  # Show slowest 10 queries
+```
+
+### `speexjs metrics:memory`
+
+Profile memory usage of your application.
+
+```bash
+speexjs metrics:memory
+speexjs metrics:memory --snapshot  # Save heap snapshot
+```
+
+---
+
+## SDK Commands
+
+### `speexjs sdk:diff`
+
+Detect breaking changes between SDK versions.
+
+```bash
+speexjs sdk:diff
+speexjs sdk:diff --base ./sdk-v1 --head ./sdk-v2
+speexjs sdk:diff --format json
+```
+
+---
+
 ## Deploy Command
 
 ### `speexjs deploy`
@@ -603,6 +659,8 @@ speexjs deploy --init             # Initialize deployment config
 | `--railway` | `boolean` | Deploy to Railway |
 | `--render` | `boolean` | Deploy to Render |
 | `--flyio` | `boolean` | Deploy to Fly.io |
+| `--blue-green` | `boolean` | Zero-downtime blue-green deployment (v3.0.0) |
+| `--rollback` | `boolean` | Rollback to previous deployment (v3.0.0) |
 | `--init` | `boolean` | Generate deployment config only |
 
 ---
@@ -620,7 +678,7 @@ speexjs tinker
 Allows you to run database queries, test models, and interact with the app in real time.
 
 ```
-SpeexJS Tinker v1.6.1
+SpeexJS Tinker v3.0.0
 > await User.all()
 > await db.table('users').where('active', true).count()
 > const user = await User.find(1)
@@ -663,6 +721,14 @@ SpeexJS Tinker v1.6.1
 | `plugin:install` | - | Install a plugin |
 | `plugin:list` | - | List installed plugins |
 | `deploy` | - | Deploy application |
+| `deploy --blue-green` | - | Zero-downtime blue-green deployment |
+| `deploy --rollback` | - | Rollback deployment |
+| `metrics:report` | - | Route latency report |
+| `metrics:bundle` | - | Bundle size analysis |
+| `metrics:queries` | - | Database query performance |
+| `metrics:memory` | - | Memory usage profile |
+| `sdk:diff` | - | Detect breaking SDK changes |
+| `make:test` | - | Generate tests from controller |
 | `tinker` | - | Interactive REPL |
 | `--version` | `-v` | Show version |
 | `--help` | `-h` | Show help |

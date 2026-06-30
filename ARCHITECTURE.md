@@ -1,7 +1,7 @@
 # Architecture — SpeexJS Web Framework
 
-> **Package:** speexjs · **Version:** 2.1.0 · **Zero Dependencies**
-> **Last Updated:** 2026-06-29
+> **Package:** speexjs · **Version:** 3.0.0 · **Zero Dependencies**
+> **Last Updated:** 2026-06-30
 
 ---
 
@@ -76,12 +76,16 @@ speexjs/
 │   │   ├── profiler/         #   Route performance profiling
 │   │   ├── audit/            #   Audit logging
 │   │   ├── webhook/          #   Webhook system
+│   │   ├── devtools/          #   DevTools Dashboard (SSE, query inspect, cache, routes, queue, env)
+│   │   ├── search/            #   Full-Text Search Engine (TF-IDF, fuzzy, highlight)
+│   │   ├── storage/           #   Storage v2 (validation, image processing, signed URLs)
 │   │   ├── isr/              #   Incremental Static Regeneration
 │   │   ├── actions/          #   Form action handling
 │   │   ├── tasks/            #   Task runner
 │   │   ├── database-mesh/    #   SQL/CSV/REST data sources
 │   │   ├── experiments/      #   A/B experiments
 │   │   ├── cluster/          #   Multi-core clustering
+│   │   ├── router/deprecation.ts  #   API deprecation management
 │   │   ├── edge/             #   Edge runtime support
 │   │   ├── health/           #   Health check endpoint
 │   │   └── ...               #   ~40+ server submodules
@@ -382,6 +386,15 @@ const users = await db
 | `morphOne` | Polymorphic one-to-one |
 | `morphMany` | Polymorphic one-to-many |
 
+### Query Builder 2.0
+
+Introduced in v3.0.0, the Query Builder 2.0 layer adds advanced query capabilities:
+
+- **Typed raw queries** — Execute raw SQL with type-safe parameter binding and result typing
+- **Streaming** — Stream large result sets row-by-row without loading into memory (Node.js async iteration)
+- **Query analysis** — `EXPLAIN` support to analyze query plans, identify missing indexes, and optimize slow queries
+- **Batch insert/update** — Efficient bulk operations with chunked execution and transactional safety
+
 ---
 
 ## 8. Authentication & Authorization
@@ -406,6 +419,12 @@ AuthManager
 └── Socialite          # OAuth2 providers
     ├── GitHub
     └── Google
+│
+├── SamlGuard          # SAML2 SSO — AuthnRequest, Response parsing, RSA-SHA256
+├── OidcGuard          # OpenID Connect — discovery, code exchange, JWT validation
+├── MagicLinkAuth      # Passwordless — crypto tokens, configurable TTL
+├── WebAuthn           # Passkeys — CBOR COSE, ES/RS verification
+└── SessionManager     # Session management — list, revoke, bulk revoke
 ```
 
 ### Authorization (Gate)
@@ -507,8 +526,16 @@ speexjs (bin)
 ├── make:model        # Generate model file
 ├── make:migration    # Generate migration file
 ├── make:middleware   # Generate middleware file
+├── make:event        # Generate event class
+├── make:job          # Generate job class
+├── make:listener     # Generate event listener
+├── make:notification # Generate notification class
+├── make:policy       # Generate authorization policy
+├── make:rule         # Generate validation rule
 ├── make:schema       # Generate schema file
 ├── make:resource     # Generate API resource
+├── make:scope        # Generate query scope
+├── make:test         # Generate test file
 ├── make:admin        # Generate admin pages
 ├── list-routes       # Display all registered routes
 ├── tinker            # Interactive TypeScript REPL
@@ -521,11 +548,29 @@ speexjs (bin)
 ├── schema:diff       # Compare models vs DB
 ├── schema:migrate    # Generate migration from diff
 ├── profile           # Profile route performance
+├── cache:clear       # Clear all cache stores
+├── cache:forget      # Remove specific cache key
+├── db:seed           # Seed the database
+├── db:wipe           # Drop all tables
+├── key:generate      # Generate app encryption key
+├── migrate:fresh     # Drop all tables and re-run migrations
+├── migrate:refresh   # Rollback and re-run migrations
+├── migrate:rollback  # Rollback the last migration batch
+├── migrate:status    # Show migration status
+├── queue:failed      # List failed queue jobs
+├── queue:flush       # Delete all failed jobs
+├── queue:listen      # Listen for queue jobs
+├── queue:retry       # Retry a failed queue job
+├── queue:work        # Process the next job on the queue
+├── route:cache       # Cache registered routes
+├── route:clear       # Clear cached routes
+├── schedule:run      # Run scheduled tasks
+├── storage:link      # Create storage symlink
 ├── plugin:install    # Install a plugin
 ├── plugin:list       # List installed plugins
 ├── plugin:search     # Search plugin marketplace
 ├── build:function    # Build serverless function
-└── migrate:status    # Show migration status
+└── notifications:table  # Create notifications table migration
 ```
 
 ---
@@ -585,7 +630,7 @@ speexjs/server/env            → dist/server/env/index.js
 | **HTTP** | TestRequest | Full request → middleware → response cycle | `server.test.ts` |
 | **Coverage** | @vitest/coverage-v8 | Minimum 85%, target >90% | `coverage-gaps.test.ts` |
 
-### Test Count: 2,500+ (97.1% coverage)
+### Test Count: 3,000+ (97.1% coverage)
 ### TypeScript: 0 errors (`tsc --noEmit`)
 
 ---

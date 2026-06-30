@@ -15,7 +15,7 @@ Thank you for considering contributing to **SpeexJS**!
 3. Follow the coding standards
 4. Write tests and ensure all pass (`npm test`)
 5. Use [Conventional Commits](https://www.conventionalcommits.org/)
-6. Push and open a PR against the `master` branch
+6. Push and open a PR against the `main` branch
 
 ## Development Setup
 
@@ -29,27 +29,44 @@ npm test
 
 ## Coding Standards
 
-- **TypeScript strict** — no `any`, use `unknown`
-- **Zero runtime dependencies** — all native
-- **Tests** — Vitest, minimum 80% coverage
-- **Format** — Biome (2 spaces, single quotes, semicolons)
-- **Files** — kebab-case, classes PascalCase, functions camelCase
-- **Imports** — use `speexjs/*` paths, e.g. `from 'speexjs/server'`
+- **TypeScript**: Strict mode, no `any`, no `@ts-ignore`
+- **Formatting**: Follow existing code style
+- **Tests**: Every feature must include tests (Vitest)
+- **Docs**: Update relevant .md files and JSDoc comments
+- **Commits**: Conventional Commits (`feat:`, `fix:`, `chore:`, `docs:`)
 
-## Structure
+## Project Structure
 
 ```
-speexjs/
-├── src/
-│   ├── schema/     # Validation
-│   ├── server/     # Server framework
-│   ├── client/     # Client framework
-│   ├── rpc/        # Type-safe RPC
-│   ├── cli/        # CLI commands
-│   └── native/     # Core helpers (zero-dep)
-└── tests/
+src/
+├── cli/           # CLI commands (35+)
+├── client/        # Client-side VDOM, Signals, Router
+├── native/        # Zero-dep utilities (crypto, logger, colors)
+├── rpc/           # Type-safe RPC
+├── schema/        # Validation (29+ types)
+└── server/        # Server framework
+    ├── auth/      # Auth guards (Session, Token, Sanctum, Socialite, OAuth, SAML2, OIDC)
+    ├── database/  # Query Builder, ORM, Migrations
+    ├── devtools/  # DevTools Dashboard
+    ├── queue/     # Queue system
+    ├── search/    # Full-text search engine
+    ├── storage/   # File storage, image processing, signed URLs
+    ├── router/    # Router, versioning, deprecation
+    └── ...
 ```
 
-## License
+## Testing
 
-By contributing, you agree that your contributions will be licensed under the [MIT License](LICENSE).
+```bash
+npm test                 # Run all tests
+npm run test:coverage    # Run with coverage report
+npm run typecheck        # TypeScript type checking
+```
+
+## Documentation
+
+Update these files when adding features:
+- `README.md` — Feature tables and CLI reference
+- `CHANGELOG.md` — Version history
+- `docs/PRD*.md` — Product requirement alignment
+- `docs/GUIDE_*.md` — User guides

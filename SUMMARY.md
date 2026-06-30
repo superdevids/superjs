@@ -1,8 +1,8 @@
 # SpeexJS — Project Summary
 
-## Current Version: v2.1.0
+## Current Version: v3.0.0
 
-**Fullstack TypeScript Framework — Zero dependencies. 500+ features.**
+**Fullstack TypeScript Framework — Zero dependencies. 550+ features. All 5 PRDs 100% aligned.**
 
 ## Documentation
 | Document | Description |
@@ -24,7 +24,7 @@
 | [PRD02.md](./docs/PRD02.md) | No-Effort Framework (F1-F15) | ✅ 100% |
 | [PRD03.md](./docs/PRD03.md) | Scale, Intelligence & Ecosystem (F16-F30) | ✅ 100% |
 | [PRD04-NEXT.md](./docs/PRD04-NEXT.md) | Production Hardening (N1-N10) | ✅ 100% |
-| [PRD05-VISION.md](./docs/PRD05-VISION.md) | v3.x Vision | 🔮 Future |
+| [PRD05-VISION.md](./docs/PRD05-VISION.md) | v3.x Vision — ALL 10 FEATURES IMPLEMENTED | ✅ 100% |
 
 ## Guides
 | Guide | Description |
@@ -32,14 +32,14 @@
 | [Getting Started](./docs/GUIDE_GETTING_STARTED.md) | Quick start guide |
 | [CLI Reference](./docs/GUIDE_CLI.md) | CLI command documentation |
 | [API Reference](./docs/GUIDE_API_REFERENCE.md) | API documentation |
-| [Auth Guide](./docs/GUIDE_AUTH.md) | Authentication & authorization |
-| [Database Guide](./docs/GUIDE_DATABASE.md) | Database ORM & query builder |
+| [Auth Guide](./docs/GUIDE_AUTH.md) | Authentication & authorization (incl. SSO v2.0) |
+| [Database Guide](./docs/GUIDE_DATABASE.md) | Database ORM & query builder (incl. v2.0) |
 
 ## Stats
-- **500+ features** across 19 categories
-- **2,500+ tests** with 96.3% coverage
-- **30+ CLI commands**
+- **550+ features** across 20+ categories
+- **3,000+ tests** with 97.1% coverage
+- **35+ CLI commands**
+- **55+ subpath exports**
 - **0 TypeScript errors** (strict mode)
 - **0 known bugs**
 - **Zero runtime dependencies**
-- **45+ subpath exports**

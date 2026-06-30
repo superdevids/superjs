@@ -21,9 +21,10 @@ We will respond within **48 hours** to confirm receipt.
 
 | Version | Support |
 |---------|---------|
-| 1.x | ✅ Active |
-| 0.6.x - 0.9.x | ⚠️ Limited |
-| < 0.6 | ❌ Not supported |
+| 3.x | ✅ Active |
+| 2.x | ✅ Limited |
+| 1.x | ⚠️ End of life |
+| < 1.0 | ❌ Not supported |
 
 ## Responsible Disclosure
 
@@ -33,10 +34,51 @@ We will respond within **48 hours** to confirm receipt.
 
 ## Security Scope
 
-- **Server:** CSRF, Helmet, session security, rate limiting
-- **Auth:** scrypt/PBKDF2, token management
-- **Schema:** Input validation prevents injection
-- **Crypto:** AES-256-GCM, constant-time comparison
-- **Database:** Parameterized queries prevent SQL injection
-- **Storage:** Path traversal prevention
-- **Dependencies:** Zero runtime dependencies = minimal attack surface
+### Server
+- CSRF double-submit cookie pattern
+- Helmet security headers (CSP, HSTS, X-Frame-Options, X-Content-Type-Options)
+- CORS with credential-aware origin validation
+- Rate limiting (static, adaptive, per-route)
+- Request body size limiting
+- HTTP response splitting prevention
+
+### Authentication (v3.0)
+- **SAML2 Guard**: RSA-SHA256 signature verification, XML parsing security
+- **OIDC Guard**: JWT validation (RS/ES algorithms), JWKS lookup, nonce verification
+- **Session Guard**: AES-256-GCM encrypted session cookies
+- **Token Guard**: HMAC-SHA256 hashed tokens, scrypt + PBKDF2 hashing
+- **Sanctum SPA**: CSRF + HMAC token management
+- **WebAuthn**: CBOR COSE key parsing, ES/RS signature verification
+- **TOTP**: RFC 6238 compliant, 30s window, timing-safe comparison
+- **OAuth**: State parameter validation, CSRF protection during OAuth flow
+- **Account Lockout**: Brute force protection with exponential backoff
+
+### Database
+- **Parameterized queries**: All queries use parameterized SQL — no string concatenation
+- **Input validation**: SQL injection prevention on whereRaw/orderByRaw
+- **Migration safety**: Destructive change detection, code reference scanning
+- **UUID validation**: Strict UUID format validation
+
+### Schema Validation
+- 29+ schema types with strict validation
+- Input sanitization prevents injection attacks
+- Type coercion with safety checks
+- Refine and transform with error boundaries
+
+### Crypto
+- AES-256-GCM encryption for session data
+- HMAC-SHA256 for signed URLs, webhooks, tokens
+- scrypt + PBKDF2 for password hashing
+- Constant-time comparison for sensitive values
+- crypto.randomBytes for all token generation
+
+### Storage
+- Path traversal prevention for file operations
+- Filename sanitization
+- MIME type validation for uploads
+- Size limitation with configurable max
+
+### Zero Dependencies
+- Zero runtime dependencies = minimal attack surface
+- No supply chain risk from transitive dependencies
+- No npm audit noise — zero dependencies means zero known vulnerabilities
